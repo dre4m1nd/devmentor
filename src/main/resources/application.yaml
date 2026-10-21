@@ -9,11 +9,18 @@ spring:
       - org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
       - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
 
+# 日志：终端 UI 由 CLI 自己渲染，框架日志一律压到 warn，避免盖住对话。
+# 需要排查问题时临时加 --debug 或设 DEVMENTOR_LOG_LEVEL=debug 即可放开。
 logging:
   level:
     root: warn
-    dre4m1nd.devmentor: info
+    dre4m1nd.devmentor: ${DEVMENTOR_LOG_LEVEL:warn}
     io.agentscope: warn
+    org.springframework: warn
+    reactor: warn
+  pattern:
+    # 去掉时间戳/PID/线程名这类对终端用户无意义的前缀。
+    console: "%5p %-40.40logger{0} : %m%n"
 
 devmentor:
   # provider:model 形式。默认走 OpenRouter 的免费模型（OpenAI 兼容网关）。

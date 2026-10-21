@@ -6,7 +6,9 @@ import dre4m1nd.devmentor.arch.ArchitectureAnalyzer;
 import dre4m1nd.devmentor.agent.MentorSession;
 import dre4m1nd.devmentor.agent.PermissionProfiles;
 import dre4m1nd.devmentor.config.DevMentorConfigException;
+import dre4m1nd.devmentor.config.CredentialStore;
 import dre4m1nd.devmentor.config.MentorProperties;
+import dre4m1nd.devmentor.config.ProviderCatalog;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.AgentEventType;
@@ -28,7 +30,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jline.keymap.KeyMap;
+import org.jline.reader.Binding;
 import org.jline.reader.Candidate;
+import org.jline.reader.Reference;
+import org.jline.reader.Widget;
+import org.jline.utils.InfoCmp;
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -57,6 +64,7 @@ public class DevMentorCli implements ApplicationRunner {
 
     private final MentorProperties props;
     private final MentorAgentFactory factory;
+    private final CredentialStore credentialStore;
 
     private HarnessAgent agent;
     private MentorSession session;
@@ -68,9 +76,11 @@ public class DevMentorCli implements ApplicationRunner {
     private boolean verbose;
     private boolean color;
 
-    public DevMentorCli(MentorProperties props, MentorAgentFactory factory) {
+    public DevMentorCli(
+            MentorProperties props, MentorAgentFactory factory, CredentialStore credentialStore) {
         this.props = props;
         this.factory = factory;
+        this.credentialStore = credentialStore;
     }
 
     @Override
@@ -103,30 +113,10 @@ public class DevMentorCli implements ApplicationRunner {
             return;
         }
 
-        try {
-            this.agent = factory.create();
-        } catch (DevMentorConfigException e) {
-            printConfigFailure(e);
-            System.exit(2);
-            return;
-        } catch (RuntimeException e) {
-            // 延迟 bean 初始化时异常可能被 Spring 包一层
-            Throwable cause = e;
-            while (cause != null && !(cause instanceof DevMentorConfigException)) {
-                cause = cause.getCause();
-            }
-            if (cause instanceof DevMentorConfigException config) {
-                printConfigFailure(config);
-            } else {
-                System.err.println();
-                System.err.println("✖ 启动失败：" + rootMessage(e));
-                System.err.println();
-            }
-            System.exit(2);
-            return;
-        }
+        // Agent 延迟初始化：首次 ask() 时才创建，缺 Key 时先启动 REPL 再提示
 
         this.session = new MentorSession(props.getUserId(), props.getSessionId());
+        // agent 延迟创建，首次 ask 时初始化
         this.terminal =
                 TerminalBuilder.builder()
                         .name("devmentor")
@@ -190,11 +180,7 @@ public class DevMentorCli implements ApplicationRunner {
         }
     }
 
-    private static void printConfigFailure(DevMentorConfigException e) {
-        System.err.println();
-        System.err.println("✖ " + e.getMessage());
-        System.err.println();
-    }
+
 
     // ------------------------------------------------------------------ REPL
 
@@ -245,6 +231,225 @@ public class DevMentorCli implements ApplicationRunner {
         renderer.system("（已中断当前回答）");
     }
 
+    /** 惰性创建 Agent；失败时打印友好提示并返回 false。 */
+    private boolean ensureAgent() {
+        if (this.agent != null) {
+            return true;
+        }
+        try {
+            this.agent = factory.create();
+            return true;
+        } catch (DevMentorConfigException e) {
+            renderer.error(e.getMessage());
+            renderer.system("提示：直接用 /login 登录厂商并输入 API Key，也可以设置环境变量后重启。");
+            return false;
+        } catch (RuntimeException e) {
+            // 延迟 bean 初始化时异常可能被 Spring 包一层
+            Throwable cause = e;
+            while (cause != null && !(cause instanceof DevMentorConfigException)) {
+                cause = cause.getCause();
+            }
+            if (cause instanceof DevMentorConfigException config) {
+                renderer.error(config.getMessage());
+                renderer.system("提示：直接用 /login 登录厂商并输入 API Key，也可以设置环境变量后重启。");
+            } else {
+                renderer.error("Agent 初始化失败：" + rootMessage(e));
+            }
+            return false;
+        }
+    }
+
+    // ------------------------------------------------------------------ login
+
+    /**
+     * {@code /login}：先选厂商，再输入 Key，保存后立刻重建 Agent。
+     *
+     * <p>Key 用 JLine 的 {@link org.jline.reader.MaskingCallback} 掩码输入，避免明文留在
+     * 屏幕上或被终端滚动缓冲记住。输入为空即取消。
+     */
+    private void handleLogin() {
+        renderer.system(ProviderCatalog.menu());
+        String choice = readQuietly("厂商序号 › ");
+        if (choice == null || choice.isBlank()) {
+            renderer.system("已取消。");
+            return;
+        }
+        int id;
+        try {
+            id = Integer.parseInt(choice.trim());
+        } catch (NumberFormatException e) {
+            renderer.error("请输入序号（1-" + ProviderCatalog.PROVIDERS.size() + "）。");
+            return;
+        }
+        ProviderCatalog.Provider provider = ProviderCatalog.byId(id);
+        if (provider == null) {
+            renderer.error("没有序号 " + id + " 对应的厂商。");
+            return;
+        }
+
+        // 本地 Ollama 不需要 Key：配好地址直接切换。
+        if (!ProviderCatalog.requiresKey(provider)) {
+            applyProvider(provider, "");
+            renderer.success("已切换到 " + provider.label() + "（无需 API Key）。");
+            return;
+        }
+
+        renderer.system("厂商：" + provider.label());
+        renderer.system("获取 Key：" + provider.hint());
+        String key = readMasked("API Key › ");
+        if (key == null || key.isBlank()) {
+            renderer.system("已取消，未保存任何凭据。");
+            return;
+        }
+        key = key.trim();
+
+        try {
+            credentialStore.save(provider.provider(), key);
+            renderer.success("凭据已保存到 " + credentialStore.file());
+        } catch (Exception e) {
+            renderer.error("保存凭据失败：" + e.getMessage());
+            return;
+        }
+
+        applyProvider(provider, key);
+        renderer.success("已登录 " + provider.label() + "，模型：" + props.getModelId());
+        renderer.system("现在可以开始提问了。");
+    }
+
+    /** 把选定的厂商写成配置，并重建 Agent 让新凭据立刻生效。 */
+    private void applyProvider(ProviderCatalog.Provider provider, String apiKey) {
+        props.setModelId(provider.provider() + ":" + provider.defaultModel());
+        props.setBaseUrl(provider.defaultBaseUrl());
+        props.setApiKey(apiKey);
+        resetAgent();
+    }
+
+    /**
+     * 丢掉当前 Agent，下次提问时按新配置重建。
+     *
+     * <p>模型与权限上下文都在 Agent 构建期绑定，改 provider 只能重建；会话 id 不变，
+     * 因此新旧 Agent 指向同一份持久化状态。
+     */
+    private void resetAgent() {
+        if (agent != null) {
+            try {
+                agent.close();
+            } catch (Exception ignored) {
+                // 关闭旧 Agent 失败不影响新建
+            }
+            agent = null;
+        }
+    }
+
+    /** {@code /logout}：清除已保存的 Key。 */
+    private void handleLogout(String providerArg) {
+        java.util.Map<String, String> saved = credentialStore.load();
+        if (saved.isEmpty()) {
+            renderer.system("没有已保存的凭据。");
+            return;
+        }
+        if (providerArg == null) {
+            // 不带参数：清除当前模型对应的厂商，这是最常见的意图。
+            String provider = currentProvider();
+            if (provider != null && saved.containsKey(provider)) {
+                removeProvider(provider);
+                return;
+            }
+            StringBuilder sb = new StringBuilder("已保存凭据的厂商：\n");
+            saved.forEach((p, k) -> sb.append("  ").append(p).append("  ").append(mask(k)).append('\n'));
+            sb.append("\n用 /logout <厂商> 清除，例如 /logout openai。");
+            renderer.system(sb.toString());
+            return;
+        }
+        String provider = providerArg.toLowerCase(Locale.ROOT);
+        ProviderCatalog.Provider known = ProviderCatalog.byProvider(provider);
+        String name = known == null ? provider : known.provider();
+        if (!saved.containsKey(name)) {
+            renderer.error("没有为 " + name + " 保存凭据。");
+            return;
+        }
+        removeProvider(name);
+    }
+
+    /** 删除指定 provider 的凭据并重建 Agent，让新状态立刻生效。 */
+    private void removeProvider(String provider) {
+        try {
+            credentialStore.remove(provider);
+            props.setApiKey("");
+            resetAgent();
+            renderer.success("已清除 " + provider + " 的凭据。输入 /login 可重新登录。");
+        } catch (Exception e) {
+            renderer.error("清除失败：" + e.getMessage());
+        }
+    }
+
+    /** 当前模型 id 里的 provider 前缀；取不到时返回 {@code null}。 */
+    private String currentProvider() {
+        String modelId = props.getModelId();
+        if (modelId == null) {
+            return null;
+        }
+        int idx = modelId.indexOf(':');
+        return idx > 0 ? modelId.substring(0, idx).toLowerCase(Locale.ROOT) : null;
+    }
+
+    /** 展示用：只露首尾几位。 */
+    static String mask(String key) {
+        if (key == null || key.length() <= 8) {
+            return "****";
+        }
+        return key.substring(0, 4) + "…" + key.substring(key.length() - 4);
+    }
+
+    /** 安静读一行（不回显额外提示）。取消返回 null。 */
+    private String readQuietly(String promptText) {
+        try {
+            return reader.readLine(promptText);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 掩码读一行：屏幕上显示 {@code *}，且不写入历史记录。
+     *
+     * <p>{@link org.jline.reader.MaskingCallback#history(String)} 返回空串，Key 就不会被
+     * 写进 {@code ~/.devmentor/history}——否则明文密钥会留在磁盘上。
+     *
+     * <p>非 TTY（管道、重定向）时 JLine 的掩码重绘会反复刷屏，此时退回普通读取：
+     * 既然没有终端，屏幕上本来也看不到任何东西。
+     */
+    private String readMasked(String promptText) {
+        if (!isInteractive()) {
+            renderer.system(promptText + "（非交互输入，不回显）");
+            return readQuietly("");
+        }
+        try {
+            return reader.readLine(
+                    promptText,
+                    null,
+                    new org.jline.reader.MaskingCallback() {
+                        @Override
+                        public String display(String line) {
+                            return "*".repeat(line == null ? 0 : line.length());
+                        }
+
+                        @Override
+                        public String history(String line) {
+                            return ""; // 不记录到历史，避免明文落盘
+                        }
+                    },
+                    null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 当前是否连着真实终端。管道/重定向时为 {@code false}。 */
+    private boolean isInteractive() {
+        return terminal != null && !"dumb".equals(terminal.getType());
+    }
+
     // --------------------------------------------------------------- commands
 
     /** @return false 表示应退出 */
@@ -269,6 +474,7 @@ public class DevMentorCli implements ApplicationRunner {
                 return true;
             }
             case "reset" -> {
+                if (!ensureAgent()) return true;
                 agent.clearContext(session.runtimeContext());
                 renderer.success("当前会话上下文已清空。");
                 return true;
@@ -289,6 +495,7 @@ public class DevMentorCli implements ApplicationRunner {
                     renderer.error(e.getMessage());
                     return true;
                 }
+                if (!ensureAgent()) return true;
                 props.setPermissionMode(target);
                 // setPermissionMode 会保留已安装的 ASK 规则，只切换模式；
                 // interactive 对应 ACCEPT_EDITS（只读放行、写操作询问）。
@@ -298,6 +505,7 @@ public class DevMentorCli implements ApplicationRunner {
                 return true;
             }
             case "plan" -> {
+                if (!ensureAgent()) return true;
                 String target = parsed.arg(0);
                 boolean on = agent.isPlanModeActive(session.runtimeContext());
                 if (target == null) {
@@ -330,6 +538,14 @@ public class DevMentorCli implements ApplicationRunner {
                 updateLanguage(lang.toLowerCase(Locale.ROOT));
                 return true;
             }
+            case "login" -> {
+                handleLogin();
+                return true;
+            }
+            case "logout" -> {
+                handleLogout(parsed.arg(0));
+                return true;
+            }
             case "model" -> {
                 String id = parsed.arg(0);
                 if (id == null) {
@@ -342,6 +558,7 @@ public class DevMentorCli implements ApplicationRunner {
                 return true;
             }
             case "tools" -> {
+                if (!ensureAgent()) return true;
                 renderer.system("可用工具：\n  " + String.join("\n  ", agent.getToolkit().getToolNames().stream().sorted().toList()));
                 return true;
             }
@@ -492,6 +709,9 @@ public class DevMentorCli implements ApplicationRunner {
 
     /** 跑一轮对话，处理流式事件与 HITL 确认。 */
     private void ask(String text) {
+        if (!ensureAgent()) {
+            return; // 创建失败，已提示用户
+        }
         RuntimeContext ctx = session.runtimeContext();
         AtomicReference<List<ToolUseBlock>> pending = new AtomicReference<>(List.of());
         AtomicReference<String> failure = new AtomicReference<>();
@@ -579,27 +799,144 @@ public class DevMentorCli implements ApplicationRunner {
             // 历史文件不可写不影响使用
         }
         DefaultHistory history = new DefaultHistory();
+        SlashCommandCompleter completer = new SlashCommandCompleter();
         LineReaderBuilder builder =
                 LineReaderBuilder.builder()
                         .terminal(terminal)
                         .appName("devmentor")
                         .history(history)
                         .parser(new DefaultParser())
-                        .completer(
-                                (LineReader r, ParsedLine parsed, List<Candidate> candidates) -> {
-                                    String word = parsed.word();
-                                    if (word == null || !word.startsWith("/")) {
-                                        return;
-                                    }
-                                    for (String name : SlashCommands.commandNames()) {
-                                        if (name.startsWith(word)) {
-                                            candidates.add(new Candidate(name));
-                                        }
-                                    }
-                                });
+                        .completer(completer);
         LineReader lineReader = builder.build();
         lineReader.setVariable(LineReader.HISTORY_FILE, historyFile);
+
+        // 输入 "/" 就立刻列出候选，不必先按 Tab。
+        lineReader.setOpt(LineReader.Option.AUTO_LIST);
+        // AUTO_MENU_LIST 让候选按"描述列"排版，读起来像一张菜单。
+        lineReader.setOpt(LineReader.Option.AUTO_MENU_LIST);
+        // 注意：不开 AUTO_MENU。它会在候选唯一时自动改写输入，
+        // 在非 TTY（管道/重定向）下会把 /quit 之类改坏成 /archquit。
+        // 自动弹菜单统一由下面的 installAutoMenuOnSlash 负责。
+        // 多候选时进入可交互的菜单循环（Tab 下一个、Shift+Tab 上一个）。
+        lineReader.setOpt(LineReader.Option.MENU_COMPLETE);
+        // 候选多于一屏时滚动显示。
+        lineReader.setVariable(LineReader.LIST_MAX, 200);
+        lineReader.setVariable(LineReader.MENU_LIST_MAX, 200);
+
+        styleCompletionMenu(lineReader);
+        bindMenuArrowKeys(lineReader);
+        // 只在真实终端里接管打字补全。管道/重定向时 JLine 会逐字符喂入，
+        // 弹菜单会把后续字符当导航键吃掉（例如 /quit 变成 /archquit）。
+        if (isInteractive()) {
+            installAutoMenuOnSlash(lineReader, completer);
+        }
         return lineReader;
+    }
+
+    /**
+     * 输入 {@code /} 或继续输入命令前缀时，主动弹出候选菜单。
+     *
+     * <p>JLine 的 {@code AUTO_LIST} 只在 <b>按 Tab 触发的 doComplete 内部</b>生效，打字过程中
+     * 根本不会调用 completer（{@code selfInsert} 只负责插入字符）。所以"输入斜杠就出菜单"必须
+     * 自己接管 {@code self-insert}：插入字符后，若当前行以 {@code /} 开头且还没有空格，
+     * 就主动调一次补全 widget。
+     *
+     * <p>只在斜杠命令场景触发，普通提问打字时完全不干预。
+     */
+    private static void installAutoMenuOnSlash(
+            LineReader lineReader, SlashCommandCompleter completer) {
+        Widget original = lineReader.getWidgets().get(LineReader.SELF_INSERT);
+        if (original == null) {
+            return;
+        }
+        lineReader.getWidgets()
+                .put(
+                        LineReader.SELF_INSERT,
+                        () -> {
+                            String before = lineReader.getBuffer().toString();
+                            int cursorBefore = lineReader.getBuffer().cursor();
+                            original.apply();
+
+                            String trimmed = lineReader.getBuffer().toString().stripLeading();
+                            boolean typingCommand =
+                                    trimmed.startsWith("/") && trimmed.indexOf(' ') < 0;
+                            if (!typingCommand) {
+                                return true;
+                            }
+
+                            // 只有候选不止一个时才进菜单，唯一候选直接补全更省事。
+                            if (lineReader.getBuffer().toString().equals(before)) {
+                                return true; // 没插入任何字符（如方向键），不重复触发
+                            }
+                            int matches = countCandidates(lineReader, completer);
+                            // 只有多候选才弹菜单。唯一候选或零候选时绝不动输入——
+                            // 否则会出现输入 /quit 被补成 /archquit 这类误伤。
+                            if (matches > 1) {
+                                lineReader.callWidget(LineReader.MENU_COMPLETE);
+                            }
+                            return true;
+                        });
+    }
+
+    /**
+     * 去掉候选菜单的洋红底色，改成不抢眼的样式。
+     *
+     * <p>JLine 默认 {@code LIST_BACKGROUND = "bg:bright-magenta"}、{@code SELECTION = "inverse"}，
+     * 候选区会被整块刷成亮洋红并反色，在深色终端上非常刺眼。这里：
+     * <ul>
+     *   <li>背景设为 {@code bg:default}，跟随终端本色，不额外填充；
+     *   <li>选中项只用<b>加粗 + 青绿前景</b>，不用反色块；
+     *   <li>说明文字用暗色，作为次要信息。
+     * </ul>
+     * 保留 16 色以内的取值，确保老式 conhost 也能正确渲染。
+     */
+    private static void styleCompletionMenu(LineReader lineReader) {
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_LIST_BACKGROUND, "bg:default");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_BACKGROUND, "bg:default");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_LIST_SELECTION, "fg:cyan,bold");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_SELECTION, "fg:cyan,bold");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_LIST_STARTING, "fg:green");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_STARTING, "fg:green");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_LIST_DESCRIPTION, "fg:bright-black");
+        lineReader.setVariable(LineReader.COMPLETION_STYLE_DESCRIPTION, "fg:bright-black");
+    }
+
+    /**
+     * 给 JLine 的 {@code menu} keymap 补上上下方向键。
+     *
+     * <p>JLine 进入菜单循环后只处理 {@code menu} keymap 里的键，而它默认只绑了
+     * Tab / Shift+Tab / Enter 三个。{@code doMenu()} 内部其实**已经实现**了
+     * {@code menuSupport.up()} / {@code down()} 的分支（对应 UP_LINE_OR_HISTORY /
+     * DOWN_LINE_OR_HISTORY），只是没绑键。这里把方向键接上去，就能用上下键在候选中移动、
+     * 用 Enter 确认——与 Claude Code 的手感一致。
+     */
+    private static void bindMenuArrowKeys(LineReader lineReader) {
+        KeyMap<Binding> menu = lineReader.getKeyMaps().get(LineReader.MENU);
+        if (menu == null) {
+            return; // 没有 menu keymap 时保持 JLine 默认行为
+        }
+        Terminal term = lineReader.getTerminal();
+        menu.bind(new Reference(LineReader.UP_LINE_OR_HISTORY),
+                KeyMap.key(term, InfoCmp.Capability.key_up));
+        menu.bind(new Reference(LineReader.DOWN_LINE_OR_HISTORY),
+                KeyMap.key(term, InfoCmp.Capability.key_down));
+    }
+
+    /** 当前行能补出多少个候选（用于决定是否进菜单）。 */
+    private static int countCandidates(LineReader lineReader, SlashCommandCompleter completer) {
+        try {
+            List<Candidate> found = new ArrayList<>();
+            completer.complete(
+                    lineReader,
+                    lineReader.getParser()
+                            .parse(
+                                    lineReader.getBuffer().toString(),
+                                    lineReader.getBuffer().cursor()),
+                    found);
+            return found.size();
+        } catch (Exception | Error e) {
+            return 0; // 任何异常都退回"不弹菜单"，不能打断输入
+        }
     }
 
     private boolean supportsColor() {
@@ -620,6 +957,7 @@ public class DevMentorCli implements ApplicationRunner {
                         AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold()));
         out.println(renderer.paint("└" + "─".repeat(56) + "┘", AttributedStyle.DEFAULT.faint()));
         out.println("  模型     " + props.getModelId());
+        out.println("  凭据     " + credentialStatus());
         out.println("  会话     " + session.getSessionId());
         out.println("  工作区   " + factory.workspaceDir());
         out.println("  代码目录 " + factory.projectRoot());
@@ -628,6 +966,24 @@ public class DevMentorCli implements ApplicationRunner {
         out.println(renderer.paint("  直接提问，或输入 /help 查看命令。", AttributedStyle.DEFAULT.faint()));
         out.println();
         out.flush();
+    }
+
+    /** 一行说明当前凭据来源，让用户一眼看出"能不能用"以及 key 从哪来。 */
+    private String credentialStatus() {
+        String modelId = props.getModelId();
+        int idx = modelId.indexOf(':');
+        String provider = idx > 0 ? modelId.substring(0, idx).toLowerCase(Locale.ROOT) : "";
+        if (props.getApiKey() != null && !props.getApiKey().isBlank()) {
+            return "已提供（" + mask(props.getApiKey()) + "）";
+        }
+        String saved = credentialStore.find(provider);
+        if (saved != null && !saved.isBlank()) {
+            return "已登录 " + provider + "（" + mask(saved) + "）";
+        }
+        if ("ollama".equals(provider)) {
+            return "无需 Key（本地 Ollama）";
+        }
+        return "未登录 — 输入 /login 选择厂商并填入 API Key";
     }
 
     /**

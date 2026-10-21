@@ -22,8 +22,11 @@ public class ModelConfig {
 
     private final MentorProperties props;
 
-    public ModelConfig(MentorProperties props) {
+    private final CredentialStore credentialStore;
+
+    public ModelConfig(MentorProperties props, CredentialStore credentialStore) {
         this.props = props;
+        this.credentialStore = credentialStore;
     }
 
     /**
@@ -44,8 +47,16 @@ public class ModelConfig {
                             + "请写成 provider:model，例如 openai:minimax/minimax-m3.1-flash:free");
         }
 
-        String apiKey = blankToNull(props.getApiKey());
+        String provider = providerOf(modelId);
+        String apiKey = resolveApiKey(provider);
         String baseUrl = blankToNull(props.getBaseUrl());
+        if (baseUrl == null) {
+            // 未显式配置时，用厂商目录里的默认网关（例如 OpenRouter 的地址）。
+            ProviderCatalog.Provider known = ProviderCatalog.byProvider(provider);
+            if (known != null) {
+                baseUrl = blankToNull(known.defaultBaseUrl());
+            }
+        }
         if (apiKey == null && requiresApiKey(modelId)) {
             throw new DevMentorConfigException(
                     missingKeyMessage(modelId));
@@ -62,13 +73,34 @@ public class ModelConfig {
 
         try {
             Model model = ModelRegistry.resolve(modelId, ctx.build());
-            log.info("模型已就绪: {} (baseUrl={})", modelId, baseUrl == null ? "provider 默认" : baseUrl);
+            // 用 DEBUG：banner 已经把模型显示给用户了，INFO 级别重复一次只是噪音。
+            log.debug("模型已就绪: {} (baseUrl={})", modelId, baseUrl == null ? "provider 默认" : baseUrl);
             return model;
         } catch (RuntimeException e) {
             throw new DevMentorConfigException(
                     "无法创建模型 \"" + modelId + "\"：" + rootMessage(e) + "\n" + missingKeyMessage(modelId),
                     e);
         }
+    }
+
+    /** 取 {@code provider:model} 的 provider 部分。 */
+    private static String providerOf(String modelId) {
+        int idx = modelId.indexOf(':');
+        return idx <= 0 ? "" : modelId.substring(0, idx).toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * 按优先级解析 API Key：配置/环境变量 &gt; 本地凭据文件。
+     *
+     * <p>顺序是有意的：CI 用环境变量注入的 Key 会覆盖开发机 {@code /login} 保存的 Key，
+     * 因此同一台机器上跑流水线不会误用个人凭据。
+     */
+    private String resolveApiKey(String provider) {
+        String fromProps = blankToNull(props.getApiKey());
+        if (fromProps != null) {
+            return fromProps;
+        }
+        return blankToNull(credentialStore.find(provider));
     }
 
     private static boolean requiresApiKey(String modelId) {

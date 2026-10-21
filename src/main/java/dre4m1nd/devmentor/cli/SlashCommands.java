@@ -23,6 +23,8 @@ public final class SlashCommands {
                     new Definition("/lesson", "/lesson [slug]", "列出或阅读课程"),
                     new Definition("/progress", "/progress", "查看学习进度"),
                     new Definition("/lang", "/lang <zh|en>", "切换讲解语言"),
+                    new Definition("/login", "/login", "登录：选择厂商并输入 API Key"),
+                    new Definition("/logout", "/logout [厂商]", "清除已保存的 API Key"),
                     new Definition("/model", "/model [id]", "查看或切换模型"),
                     new Definition("/tools", "/tools", "列出可用工具"),
                     new Definition("/workspace", "/workspace", "显示工作区与代码目录"),
@@ -90,5 +92,50 @@ public final class SlashCommands {
     /** 补全候选：所有命令名。 */
     public static List<String> commandNames() {
         return DEFINITIONS.stream().map(Definition::name).distinct().toList();
+    }
+
+    /** 按名字（不含斜杠）查定义，供补全时取描述。 */
+    public static Definition find(String nameWithoutSlash) {
+        if (nameWithoutSlash == null) {
+            return null;
+        }
+        return DEFINITIONS.stream()
+                .filter(d -> d.name().substring(1).equalsIgnoreCase(nameWithoutSlash))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 某个命令第一个参数的候选值。
+     *
+     * <p>只对取值集合固定的命令返回候选；其余返回空表，让补全器不干扰自由输入。
+     */
+    public static List<String> argumentCandidates(String nameWithoutSlash) {
+        if (nameWithoutSlash == null) {
+            return List.of();
+        }
+        return switch (nameWithoutSlash.toLowerCase(Locale.ROOT)) {
+            case "mode" -> List.of("interactive", "read-only", "full");
+            case "lang" -> List.of("zh", "en");
+            case "plan" -> List.of("on", "off");
+            case "quit", "exit" -> List.of();
+            default -> List.of();
+        };
+    }
+
+    /** 参数候选的说明文字（显示在菜单右侧）。 */
+    public static String argumentDescription(String nameWithoutSlash, String value) {
+        String cmd = nameWithoutSlash == null ? "" : nameWithoutSlash.toLowerCase(Locale.ROOT);
+        return switch (cmd) {
+            case "mode" -> switch (value) {
+                case "interactive" -> "写操作前询问（默认）";
+                case "read-only" -> "只允许只读工具";
+                case "full" -> "不再询问，谨慎使用";
+                default -> "";
+            };
+            case "lang" -> "zh".equals(value) ? "中文讲解" : "英文讲解";
+            case "plan" -> "on".equals(value) ? "进入只读设计阶段" : "退出 plan 模式";
+            default -> "";
+        };
     }
 }
