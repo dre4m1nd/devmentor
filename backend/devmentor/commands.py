@@ -17,20 +17,33 @@ DEFINITIONS: list[tuple[str, str, str]] = [
     ("/new", "/new [名字]", "开启新会话"),
     ("/reset", "/reset", "清空当前会话上下文"),
     ("/mode", "/mode <interactive|read-only|full>", "切换权限档位"),
-    ("/plan", "/plan [on|off]", "切换 plan 模式"),
     ("/arch", "/arch [路径]", "架构评审：静态分析当前项目"),
     ("/lesson", "/lesson [slug]", "列出或阅读课程"),
     ("/progress", "/progress", "查看学习进度"),
-    ("/lang", "/lang <zh|en>", "切换讲解语言"),
     ("/login", "/login", "登录：选择厂商并输入 API Key"),
     ("/logout", "/logout [厂商]", "清除已保存的 API Key"),
     ("/model", "/model [id]", "查看或切换模型"),
     ("/tools", "/tools", "列出可用工具"),
     ("/workspace", "/workspace", "显示工作区与代码目录"),
     ("/session", "/session", "显示当前会话信息"),
-    ("/verbose", "/verbose", "切换工具输出全量/摘要"),
-    ("/think", "/think", "切换是否显示推理过程"),
     ("/quit", "/quit", "退出"),
+]
+
+
+#: 真实注册的工具名。与 agent.build_toolkit 保持一致，
+#: 改工具时只需改这里与那边两处（有测试约束，见 tests/test_commands.py）。
+TOOL_NAMES = [
+    "curriculum_list",
+    "curriculum_read",
+    "progress_read",
+    "progress_record",
+    "java_run_snippet",
+    "java_compile_check",
+    "arch_scan",
+    "arch_findings",
+    "arch_dependencies",
+    "arch_file_profile",
+    "arch_read_source",
 ]
 
 
@@ -49,11 +62,7 @@ def command_names() -> list[str]:
 
 def argument_candidates(name: str) -> list[str]:
     """某个命令第一个参数的候选值（供前端补全）。"""
-    return {
-        "mode": ["interactive", "read-only", "full"],
-        "lang": ["zh", "en"],
-        "plan": ["on", "off"],
-    }.get(name.lower(), [])
+    return {"mode": ["interactive", "read-only", "full"]}.get(name.lower(), [])
 
 
 def parse(line: str) -> tuple[str, list[str]] | None:
@@ -80,9 +89,6 @@ class CommandHandler:
     def __init__(self, settings: Settings, store: CredentialStore) -> None:
         self._settings = settings
         self._store = store
-        self._verbose = False
-        self._think = False
-        self.plan_mode = False
 
     async def handle(
         self, name: str, args: list[str], service
@@ -150,49 +156,8 @@ class CommandHandler:
             yield proto.system(f"权限档位已切换为 {mode}")
             return
 
-        if name == "lang":
-            if not args or args[0] not in ("zh", "en"):
-                yield proto.error("用法：/lang <zh|en>")
-                return
-            self._settings.language = args[0]
-            yield proto.system(
-                "讲解语言已切换为 " + ("中文" if args[0] == "zh" else "英文")
-            )
-            return
-
-        if name == "plan":
-            if not args:
-                yield proto.system(f"plan 模式当前：{'开启' if self.plan_mode else '关闭'}")
-                return
-            self.plan_mode = args[0] in ("on", "true")
-            yield proto.system(
-                "plan 模式已" + ("开启（只读设计阶段）" if self.plan_mode else "关闭")
-            )
-            return
-
-        if name == "think":
-            self._think = not self._think
-            yield proto.system(f"推理过程：{'显示' if self._think else '隐藏'}")
-            return
-
-        if name == "verbose":
-            self._verbose = not self._verbose
-            yield proto.system(f"工具输出：{'全量' if self._verbose else '摘要'}")
-            return
-
         if name == "tools":
-            agent = service._agent
-            if agent is None:
-                try:
-                    agent = agent or None
-                except Exception:
-                    pass
-            yield proto.system(
-                "可用工具：\n  curriculum_list, curriculum_read, progress_read, "
-                "progress_record, java_run_snippet, java_compile_check, "
-                "arch_scan, arch_findings, arch_dependencies, "
-                "arch_file_profile, arch_read_source"
-            )
+            yield proto.system("可用工具：\n  " + "\n  ".join(TOOL_NAMES))
             return
 
         if name == "login":

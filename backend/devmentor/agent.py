@@ -94,6 +94,42 @@ class MissingCredential(Exception):
     """没有可用的模型凭据。"""
 
 
+def _permission_for(mode: str, write_tool: bool):
+    """按权限档位给写类工具配权限决策。
+
+    三档对应三个行为：
+      - read-only   -> DENY：任何写操作直接拒绝
+      - interactive -> ASK：执行前必须用户确认（默认，最安全）
+      - full        -> ALLOW：不再询问
+
+    只读工具永远 ALLOW，不需要确认。
+    """
+    if not write_tool:
+        return None  # 走 AgentScope 默认（ALLOW）
+
+    from agentscope.permission import PermissionBehavior, PermissionDecision
+
+    normalized = (mode or "interactive").strip().lower()
+    if normalized == "read-only":
+        return PermissionDecision(
+            behavior=PermissionBehavior.DENY,
+            message="当前是 read-only 档位，写操作已被拒绝。可用 /mode interactive 放开。",
+            decision_reason="permission-mode=read-only",
+        )
+    if normalized == "full":
+        return PermissionDecision(
+            behavior=PermissionBehavior.ALLOW,
+            message="permission-mode=full，已放行。",
+            decision_reason="permission-mode=full",
+        )
+    return PermissionDecision(
+        behavior=PermissionBehavior.ASK,
+        message="这是一次写操作，需要确认。",
+        decision_reason="permission-mode=interactive",
+        bypass_immune=True,
+    )
+
+
 def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
     """注册全部工具。
 
@@ -127,6 +163,7 @@ def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
             _wrap(progress.record_progress),
             name="progress_record",
             description="记录一条学习进度，用于跨会话记忆。note 是进度内容。",
+            permission=_permission_for(settings.permission_mode, write_tool=True),
         ),
         FunctionTool(
             _wrap(
@@ -141,6 +178,7 @@ def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
                 "真正编译并运行 Java 代码片段，返回退出码、stdout、stderr。"
                 "任何声称『这段能跑』的说法都必须先调用它验证。"
             ),
+            permission=_permission_for(settings.permission_mode, write_tool=True),
         ),
         FunctionTool(
             _wrap(

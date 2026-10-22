@@ -119,20 +119,22 @@ class AgentService:
             yield proto.turn_end()
             return
 
+        from agentscope.event._event import ConfirmResult
+
         results = []
         for call in self._pending_confirm:
             results.append(
-                {
-                    "tool_call": call,
-                    "approved": approved,
-                    "reason": "" if approved else (reason or "用户拒绝了该操作"),
-                }
+                ConfirmResult(
+                    confirmed=approved,
+                    tool_call=call,
+                    rules=None,
+                )
             )
         self._pending_confirm = []
 
         try:
             async for event in agent.reply_stream(
-                UserConfirmResultEvent(results=results)
+                UserConfirmResultEvent(confirm_results=results)
             ):
                 async for out in self._translate(event):
                     yield out

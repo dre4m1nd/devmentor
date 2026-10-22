@@ -94,12 +94,20 @@ Key 的存储与优先级：
 | `/new [名字]` / `/reset` | 开新会话 / 清空当前上下文 |
 | `/arch [路径]` | **架构评审**当前项目 |
 | `/lesson [slug]` / `/progress` | 读课程 / 看学习进度 |
-| `/mode <interactive read-only full>` | 切换权限档位 |
-| `/plan [on off]` | 切换 plan 模式 |
-| `/model [id]` / `/lang <zh en>` | 换模型 / 换讲解语言 |
-| `/session` / `/workspace` / `/tools` | 查看会话 / 工作区 / 工具 |
-| `/verbose` / `/think` | 工具输出全量 / 显示推理 |
+| `/mode <interactive read-only full>` | 切换权限档位（见下） |
+| `/model [id]` | 查看或切换模型 |
+| `/session` / `/workspace` / `/tools` | 查看会话 / 工作区 / 工具清单 |
 | `/quit` | 退出 |
+
+### 权限档位（真的生效）
+
+三档在工具层面产生不同的 `PermissionDecision`，不是只改提示文案：
+
+| 档位 | 写类工具（`java_run_snippet`、`progress_record`） | 只读工具 |
+| --- | --- | --- |
+| `interactive`（默认） | **ASK** —— 执行前必须确认，且 bypass-immune（allow 规则不能静默放行） | 直接放行 |
+| `read-only` | **DENY** —— 直接拒绝，模型会收到拒绝原因并换方案 | 直接放行 |
+| `full` | **ALLOW** —— 不再询问（谨慎） | 直接放行 |
 
 ### 架构评审（核心用法）
 
