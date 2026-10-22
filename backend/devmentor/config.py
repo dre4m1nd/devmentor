@@ -24,6 +24,14 @@ class Provider:
     default_base_url: str
     default_model: str
     hint: str
+    #: 区分同名 provider 的具体厂商。
+    #: openai 前缀同时被 OpenRouter 与 OpenAI 使用（都是 OpenAI 兼容协议），
+    #: 光看 provider 分不出来，需要这个字段消歧。
+    vendor: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.vendor:
+            object.__setattr__(self, "vendor", self.provider)
 
 
 PROVIDERS: list[Provider] = [
@@ -35,6 +43,7 @@ PROVIDERS: list[Provider] = [
         default_base_url="https://openrouter.ai/api/v1",
         default_model="minimax/minimax-m3.1-flash:free",
         hint="https://openrouter.ai/keys",
+        vendor="openrouter",
     ),
     Provider(
         id=2,
@@ -62,6 +71,7 @@ PROVIDERS: list[Provider] = [
         default_base_url="https://api.openai.com/v1",
         default_model="gpt-4.1-mini",
         hint="https://platform.openai.com/api-keys",
+        vendor="openai",
     ),
     Provider(
         id=5,
@@ -97,6 +107,32 @@ def provider_by_name(name: str | None) -> Provider | None:
 
 def requires_key(p: Provider | None) -> bool:
     return p is not None and bool(p.env_var)
+
+
+def effective_provider(settings: "Settings", api_key: str | None) -> Provider | None:
+    """结合已解析的 api_key 判断真正生效的厂商记录。
+
+    `openai` 前缀同时对应 OpenRouter 与 OpenAI 两条记录（都是 OpenAI 兼容协议）。
+    光看 provider 名分不出来，要结合两处信息：
+      1. 显式配置的 base_url
+      2. key 的前缀（OpenRouter 的 key 以 sk-or- 开头）
+
+    这样即使用户只把 OPENROUTER_API_KEY 写进环境变量、没配 base_url，
+    也会正确指向 openrouter 而不是 api.openai.com。
+    """
+    base = (settings.base_url or "").lower()
+    if "openrouter" in base:
+        return _by_vendor("openrouter")
+    if settings.provider != "openai":
+        return provider_by_name(settings.provider)
+    if api_key and api_key.startswith("sk-or-"):
+        # 明确的 OpenRouter key：不要发到 api.openai.com
+        return _by_vendor("openrouter")
+    return _by_vendor("openai")
+
+
+def _by_vendor(vendor: str) -> Provider | None:
+    return next((p for p in PROVIDERS if p.vendor == vendor), None)
 
 
 # ---------------------------------------------------------------- 凭据存储
@@ -309,7 +345,9 @@ class Settings:
         names: list[str] = []
         base = (self.base_url or "").lower()
         if self.provider == "openai":
-            # OpenRouter 也是 openai 兼容协议，但用不同的标准变量名
+            # OpenRouter 也是 openai 兼容协议，但用不同的标准变量名。
+            # 显式配了 openrouter 地址时优先它；没配时先看通用变量名，
+            # 再退到 OPENROUTER_API_KEY（默认模型就走 OpenRouter 免费模型）。
             if "openrouter" in base:
                 names += ["OPENROUTER_API_KEY", "OPENAI_API_KEY"]
             else:

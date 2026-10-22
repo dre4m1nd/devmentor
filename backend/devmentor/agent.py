@@ -26,7 +26,7 @@ from agentscope.model import (
 )
 from agentscope.tool import FunctionTool, Toolkit
 
-from .config import CredentialStore, Settings, provider_by_name
+from .config import CredentialStore, Settings, effective_provider, provider_by_name
 from .tools import ArchitectureTools, CurriculumTools, ProgressTools, compile_check, run_snippet
 from .workspace import Workspace
 
@@ -50,7 +50,8 @@ def build_model(settings: Settings, store: CredentialStore):
     provider_name = settings.provider
     model_name = settings.model_name
     api_key = settings.resolve_api_key(store)
-    provider = provider_by_name(provider_name)
+    # 结合 key 前缀判断真正生效的厂商：openai 前缀可能是 OpenRouter
+    provider = effective_provider(settings, api_key)
 
     base_url = settings.base_url or (provider.default_base_url if provider else "")
 

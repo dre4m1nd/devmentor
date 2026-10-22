@@ -130,3 +130,50 @@ def test_settings_parses_provider_and_model():
 
     assert s.provider == "openai"
     assert s.model_name == "minimax/minimax-m3.1-flash:free"
+
+# ---------------------------------------------------------------- 厂商判定
+
+def test_effective_provider_detects_openrouter_by_key_prefix():
+    """sk-or- 开头的 key 必须指向 OpenRouter，不能发到 api.openai.com。"""
+    from devmentor.config import effective_provider
+
+    s = Settings()
+    s.model_id = "openai:minimax/minimax-m3.1-flash:free"
+
+    p = effective_provider(s, "sk-or-v1-abc")
+    assert p is not None
+    assert "openrouter" in p.default_base_url
+
+
+def test_effective_provider_keeps_real_openai_for_sk_key():
+    from devmentor.config import effective_provider
+
+    s = Settings()
+    s.model_id = "openai:gpt-4.1-mini"
+
+    p = effective_provider(s, "sk-proj-abc")
+    assert p is not None
+    assert p.default_base_url == "https://api.openai.com/v1"
+
+
+def test_effective_provider_respects_explicit_base_url():
+    from devmentor.config import effective_provider
+
+    s = Settings()
+    s.model_id = "openai:gpt-4.1-mini"
+    s.base_url = "https://openrouter.ai/api/v1"
+
+    p = effective_provider(s, "sk-proj-abc")
+    assert p is not None
+    assert "openrouter" in p.default_base_url
+
+
+def test_effective_provider_passthrough_for_other_providers():
+    from devmentor.config import effective_provider
+
+    s = Settings()
+    s.model_id = "deepseek:deepseek-chat"
+
+    p = effective_provider(s, "sk-abc")
+    assert p is not None
+    assert p.provider == "deepseek"
