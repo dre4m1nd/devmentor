@@ -1,0 +1,28 @@
+{
+  "name": "devmentor-cli",
+  "version": "2.0.0",
+  "description": "DevMentor terminal UI - Ink frontend for the agent service",
+  "type": "module",
+  "bin": {
+    "devmentor": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.tsx",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "ink": "^5.1.0",
+    "react": "^18.3.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -38,3 +38,18 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Node / 前端 ###
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+### Python / 后端 ###
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+### 旧的 Java 版本（重构后保留在 git 历史里） ###
