@@ -31,7 +31,7 @@ export function Banner({ info }: { info: ReadyInfo }): React.ReactElement {
     <Box flexDirection="column" marginBottom={1}>
       <Box borderStyle="round" borderColor={theme.brand} paddingX={2}>
         <Text bold color={theme.brand}>
-          DevMentor · Java 编程导师
+          DevMentor · 编程导师
         </Text>
       </Box>
       <Box flexDirection="column" marginTop={1}>
