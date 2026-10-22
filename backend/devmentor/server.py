@@ -84,7 +84,7 @@ class Server:
         if text.startswith("/"):
             parsed = parse(text)
             if parsed is None:
-                yield proto.error("命令格式不对，输入 /help 查看用法。")
+                yield proto.error("命令格式不对，输入 / 查看全部命令。")
                 return
             async for ev in self._handle_command(parsed[0], parsed[1]):
                 yield ev

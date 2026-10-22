@@ -5,6 +5,8 @@ export type CommandDef = {
   desc: string;
   /** 固定参数取值，用于二级补全 */
   args?: string[];
+  /** 带参数语法的完整用法，显示在菜单右侧。缺省时只用 name。 */
+  usage?: string;
 };
 
 /**
@@ -15,16 +17,15 @@ export type CommandDef = {
  * 命令最终都发给后端执行，前端只负责补全体验。
  */
 export const COMMANDS: CommandDef[] = [
-  { name: '/help', desc: '显示帮助' },
-  { name: '/new', desc: '开启新会话' },
+  { usage: '/new [名字]', name: '/new', desc: '开启新会话' },
   { name: '/reset', desc: '清空当前会话上下文' },
-  { name: '/mode', desc: '切换权限档位', args: ['interactive', 'read-only', 'full'] },
-  { name: '/arch', desc: '架构评审：静态分析当前项目' },
-  { name: '/lesson', desc: '列出或阅读课程' },
+  { usage: '/mode <interactive|read-only|full>', name: '/mode', desc: '切换权限档位', args: ['interactive', 'read-only', 'full'] },
+  { usage: '/arch [路径]', name: '/arch', desc: '架构评审：静态分析当前项目' },
+  { usage: '/lesson [slug]', name: '/lesson', desc: '列出或阅读课程' },
   { name: '/progress', desc: '查看学习进度' },
   { name: '/login', desc: '登录：选择厂商并输入 API Key' },
-  { name: '/logout', desc: '清除已保存的 API Key' },
-  { name: '/model', desc: '查看或切换模型' },
+  { usage: '/logout [厂商]', name: '/logout', desc: '清除已保存的 API Key' },
+  { usage: '/model [id]', name: '/model', desc: '查看或切换模型' },
   { name: '/tools', desc: '列出可用工具' },
   { name: '/workspace', desc: '显示工作区与代码目录' },
   { name: '/session', desc: '显示当前会话信息' },

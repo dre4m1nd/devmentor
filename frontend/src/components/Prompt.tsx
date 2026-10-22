@@ -100,7 +100,7 @@ export function Prompt({
                   {c.name}
                 </Text>
               </Box>
-              <Text color={theme.muted}>{c.desc}</Text>
+              <Text color={theme.muted}>{c.usage ?? c.desc}</Text>
             </Box>
           ))}
         </Box>

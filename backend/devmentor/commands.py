@@ -1,4 +1,4 @@
-"""斜杠命令：与 Java 版 /help 列表保持一致。
+"""斜杠命令表与执行。
 
 命令处理产出 Event（而不是直接打印），因此前端可以按自己的方式渲染。
 """
@@ -13,7 +13,6 @@ from .protocol import Event, MenuOption
 
 
 DEFINITIONS: list[tuple[str, str, str]] = [
-    ("/help", "/help", "显示帮助"),
     ("/new", "/new [名字]", "开启新会话"),
     ("/reset", "/reset", "清空当前会话上下文"),
     ("/mode", "/mode <interactive|read-only|full>", "切换权限档位"),
@@ -27,6 +26,7 @@ DEFINITIONS: list[tuple[str, str, str]] = [
     ("/workspace", "/workspace", "显示工作区与代码目录"),
     ("/session", "/session", "显示当前会话信息"),
     ("/quit", "/quit", "退出"),
+    ("/exit", "/exit", "退出（/quit 的别名）"),
 ]
 
 
@@ -45,15 +45,6 @@ TOOL_NAMES = [
     "arch_file_profile",
     "arch_read_source",
 ]
-
-
-def help_text() -> str:
-    lines = ["可用命令："]
-    for usage, _, desc in DEFINITIONS:
-        lines.append(f"  {usage:<38} {desc}")
-    lines.append("")
-    lines.append("直接输入内容即与导师对话；Ctrl+C 中断当前回答，Ctrl+D 退出。")
-    return "\n".join(lines)
 
 
 def command_names() -> list[str]:
@@ -97,10 +88,6 @@ class CommandHandler:
 
         if name in ("quit", "exit"):
             yield proto.bye()
-            return
-
-        if name == "help":
-            yield proto.system(help_text())
             return
 
         if name == "reset":
@@ -195,7 +182,7 @@ class CommandHandler:
             yield proto.system(tool.read_progress())
             return
 
-        yield proto.error(f"未知命令 /{name}，输入 /help 查看用法。")
+        yield proto.error(f"未知命令 /{name}。输入 / 查看全部命令。")
 
     # ------------------------------------------------------------ 登录
 
