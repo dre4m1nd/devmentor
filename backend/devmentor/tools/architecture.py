@@ -93,6 +93,13 @@ class ArchitectureTools:
         target = target.resolve()
         if not target.is_file():
             return f"文件不存在：{target}"
+        # 架构分析引擎只解析 Java。对其它语言直接说明，不要给出
+        # "可能被排除目录规则跳过"这种误导性提示。
+        if target.suffix.lower() != ".java":
+            return (
+                f"{target.name} 不是 Java 文件。架构分析引擎目前只解析 .java 源码，"
+                "无法为其它语言生成文件画像。"
+            )
         try:
             result = analyze(root)
             rel = target.relative_to(root).as_posix()
