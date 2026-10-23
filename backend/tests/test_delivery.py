@@ -128,5 +128,6 @@ def test_readme_install_works_with_current_layout():
 
 def test_no_java_build_files_in_root():
     """根目录不该再出现 Java 构建文件（已归档到 legacy/）。"""
-    for name in ("pom.xml", "src", "bin", "install.ps1", "install.sh", ".mvn"):
+    # install.ps1 / install.sh 是当前版本（Python 路线）的安装脚本，应存在
+    for name in ("pom.xml", "src", "bin", ".mvn"):
         assert not (ROOT / name).exists(), f"{name} 应归档到 legacy/"

@@ -24,9 +24,13 @@ def test_expected_top_level_dirs_exist(name):
     assert (ROOT / name).is_dir(), f"缺少 {name}/"
 
 
-@pytest.mark.parametrize("name", ["src", "pom.xml", "bin", "install.ps1", "install.sh", ".mvn"])
+@pytest.mark.parametrize("name", ["src", "pom.xml", "bin", ".mvn"])
 def test_java_version_artifacts_not_in_root(name):
-    """Java 版的构建与启动文件都不该出现在根目录。"""
+    """Java 版的构建与启动文件都不该出现在根目录。
+
+    注意 install.ps1 / install.sh 不在此列：重构后它们被重写成
+    Python 版的一键安装脚本，是当前版本的交付物，理应留在根目录。
+    """
     assert not (ROOT / name).exists(), (
         f"{name} 应归档到 legacy/，放在根目录会让人误以为项目有两个版本"
     )

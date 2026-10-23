@@ -68,6 +68,55 @@ $ devmentor
 
 ### 步骤
 
+一条命令装完依赖、构建前端、挂上全局 `devmentor`：
+
+```bash
+git clone https://github.com/dre4m1nd/devmentor.git
+cd devmentor
+
+# Windows
+powershell -ExecutionPolicy Bypass -File install.ps1
+
+# macOS / Linux
+bash install.sh
+```
+
+装完**新开一个终端**，然后：
+
+```bash
+devmentor          # 直接启动，像 claude 一样
+```
+
+脚本做了四件事：
+
+1. 检查 Python 3.11+、Node.js 18+、JDK 17+
+2. `pip install -e backend/` 装齐依赖
+3. 构建前端（`npm install && npm run build`）
+4. 写启动脚本到 `~/.devmentor/bin/devmentor` 并加入 PATH
+
+启动脚本指向**本仓库**的 `frontend/dist/cli.js`，因此 `git pull` 更新代码后
+重新跑一次安装脚本即可。
+
+想换机器位置就设环境变量，启动脚本会优先用它：
+
+```bash
+export DEVMENTOR_PROJECT_ROOT=/path/to/devmentor   # macOS / Linux
+set DEVMENTOR_PROJECT_ROOT=D:\path\to\devmentor  # Windows
+```
+
+#### 卸载
+
+```bash
+rm -rf ~/.devmentor                    # macOS / Linux
+# Windows: Remove-Item -Recurse $env:USERPROFILE\.devmentor
+```
+
+再从「系统属性 → 环境变量」里删掉 PATH 中的 `%USERPROFILE%\.devmentor\bin`。
+
+---
+
+#### 手动安装（不用脚本）
+
 ```bash
 git clone https://github.com/dre4m1nd/devmentor.git
 cd devmentor
@@ -80,7 +129,7 @@ cd ..
 # 前端依赖与构建
 cd frontend && npm install && npm run build && cd ..
 
-# 启动
+# 启动（不挂全局命令，手动指定路径）
 node frontend/dist/cli.js
 ```
 
