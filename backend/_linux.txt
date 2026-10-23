@@ -1,9 +1,0 @@
-=== java_executable 后备逻辑 ===
-  return str(candidate)
-  found = shutil.which(exe)
-  return found
-
-=== 结论 ===
-  有 shutil.which(exe) 作为最后后备，所以 PATH 里有 java 就能找到。
-  但 _jdk_candidates 不扫 /usr/lib/jvm 等标准位置：
-    若 java 不在 PATH（常见于只装了 JDK 未配 PATH），会返回 None。
