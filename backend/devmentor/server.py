@@ -83,7 +83,14 @@ class Server:
 
     async def _dispatch_text(self, text: str) -> AsyncIterator[Event]:
         text = text.strip()
+
+        # 空输入在登录阶段有明确语义：取消。
+        # 之前无条件 return，导致前端按 Esc 后登录流程卡在 stage 1，
+        # 用户再输入什么都还是被当成厂商序号。
         if not text:
+            if self._login_stage:
+                self._login_stage = 0
+                yield proto.system("已取消。")
             return
 
         # 登录流程是两段式交互，优先处理。
