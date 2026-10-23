@@ -10,6 +10,17 @@ $ devmentor
 
 ---
 
+## 内置能力
+
+| 类别 | 数量 | 说明 |
+| --- | --- | --- |
+| Agent 工具 | 11 个 | 教学验证、课程、进度、架构评审四类 |
+| 架构规则 | 9 条 | 全部确定性判断，每条带数字证据 |
+| 课程 | 8 篇 | 语法与类型 → OOP → 集合泛型 → Stream → 异常IO → 并发 → JVM → 测试与Spring |
+| 技能 | 4 个 | 代码评审、调试教练、出题助手、架构评审 |
+
+---
+
 ## 目录说明
 
 | 目录 | 说明 |
@@ -185,7 +196,7 @@ devmentor/
 │   │   │   ├── rules.py          9 条规则（纯判断）
 │   │   │   └── analyzer.py       入口与报告
 │   │   └── tools/                11 个 Agent 工具
-│   └── tests/                    77 个测试
+│   └── tests/                    34 个测试文件 / 364 个用例
 └── frontend/                     Ink 终端 UI
     └── src/
         ├── types.ts              协议类型
@@ -227,10 +238,10 @@ export DEVMENTOR_WORKSPACE=~/devmentor-data/workspace
 ## 开发
 
 ```bash
-# 后端测试（不依赖网络和 API Key，约 3 秒）
+# 后端快测（不依赖网络和 API Key，355 个，约 17 秒）
 cd backend && python -m pytest tests/ -q -m "not e2e"
 
-# 含端到端协议测试（起子进程，约 30 秒）
+# 后端全量测试（含 e2e，364 个，约 30 秒）
 cd backend && python -m pytest tests/ -q
 
 # 前端类型检查与构建
