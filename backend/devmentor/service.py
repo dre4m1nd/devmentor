@@ -340,4 +340,27 @@ def _friendly(e: Exception) -> str:
         return f"模型拒绝服务（403）：该模型可能已下线或需要额外授权，用 /model 换一个。\n{msg}"
     if "timeout" in low or "timed out" in low:
         return f"请求超时：网络或模型响应过慢，可以重试或换模型。\n{msg}"
+    # --- 以下是没有 HTTP 状态码的连接层失败 ---
+    # 这类最容易发生在：断网、代理配置错、base_url 写错、公司网络拦截。
+    # 只回显 "Connection error." 用户不知道下一步做什么。
+    if "ssl" in low or "certificate" in low:
+        return (
+            "TLS/证书校验失败：多见于公司网络代理拦截或系统根证书缺失。\n"
+            f"可以试试设置 HTTPS_PROXY，或换用 ollama 本地模型。\n{msg}"
+        )
+    if "proxy" in low:
+        return f"代理连接失败：请检查 HTTPS_PROXY / HTTP_PROXY 设置。\n{msg}"
+    if "name or service not known" in low or "nodename nor servname" in low or "getaddrinfo" in low:
+        return (
+            "域名解析失败：检查网络连接，或确认 base_url 拼写正确。\n"
+            f"当前配置的地址可能无法访问。\n{msg}"
+        )
+    if "connection" in low or "connect" in low:
+        return (
+            "无法连接到模型服务：检查网络是否通畅、base_url 是否正确，"
+            "或服务是否需要代理。\n"
+            f"如果是本地模型，确认 Ollama 已经在运行。\n{msg}"
+        )
+    if "rate" in low or "too many" in low:
+        return f"请求过于频繁，请稍等几秒再试。\n{msg}"
     return msg or type(e).__name__
