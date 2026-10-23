@@ -1,49 +1,12 @@
-HELP.md
-target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
-
 ### DevMentor runtime data ###
 .devmentor/
 
-### 本地调试用的临时输入/输出 ###
-*.log
-
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
-.vscode/
-
-### Node / 前端 ###
+### Node / frontend ###
 node_modules/
 frontend/dist/
 *.tsbuildinfo
 
-### Python / 后端 ###
+### Python / backend ###
 __pycache__/
 *.py[cod]
 .venv/
@@ -51,7 +14,13 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-### 旧的 Java 版本（重构后保留在 git 历史里） ###
-
-### 临时文件 ###
+### logs and temp files ###
+*.log
 /*.txt
+
+### editors ###
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
