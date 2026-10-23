@@ -36,11 +36,68 @@ def _source_file_name(source: str) -> str:
     return "Snippet.java"
 
 
+# 匹配字段声明：修饰符/类型 + 名字 + (可选的 = 初值) + ;
+_FIELD_DECL = re.compile(
+    r"^\s*(?:(?:private|public|protected|static|final|volatile|transient)\s+)+"
+    r"[\w.$<>\[\],\s?]+\s+\w+\s*(?:=[^;]*)?;\s*$"
+)
+# 匹配方法声明（含方法体）：修饰符 + 返回类型 + 名字 + 参数 + {
+_METHOD_DECL = re.compile(
+    r"^\s*(?:(?:private|public|protected|static|final|synchronized|abstract)\s+)*"
+    r"(?:[\w.$<>\[\],\s?]+)\s+\w+\s*\([^)]*\)\s*\{",
+    re.MULTILINE,
+)
+
+
+def _single_decl_kind(source: str) -> str | None:
+    """判断片段是不是单个"类成员声明"（字段 / 方法）。
+
+    用户经常贴一个字段或一段方法问"这样写对吗"。这类片段不是语句，
+    直接塞进 main 会报"非法的表达式开始"——错误信息对用户毫无帮助。
+    识别出来后就该包进类体，而不是方法体。
+    """
+    stripped = source.strip()
+    if not stripped:
+        return None
+    # 方法：有方法体且不是完整类型声明
+    if _METHOD_DECL.search(stripped) and not _ANY_TYPE.search(stripped):
+        # 整段只有一个方法（不含其它语句）时按成员处理
+        return "method"
+    lines = [l for l in stripped.splitlines() if l.strip()]
+    if lines and all(_FIELD_DECL.match(l) for l in lines):
+        return "field"
+    return None
+
+
 def _normalize(source: str) -> str:
     """让片段可以直接跑：没有类声明时包一层。"""
     if _ANY_TYPE.search(source) or _PUBLIC_TYPE.search(source):
         return source
-    # 只有语句/方法定义：包成 main
+
+    kind = _single_decl_kind(source)
+    if kind == "field":
+        # 字段声明放进类体，再补一个 main 打印/占位，否则无法运行
+        body = "\n".join("    " + line for line in source.strip().splitlines())
+        return (
+            "public class Snippet {\n"
+            f"{body}\n"
+            "    public static void main(String[] args) {\n"
+            '        System.out.println("（片段已编译通过；它为字段声明，无可运行语句）");\n'
+            "    }\n"
+            "}\n"
+        )
+    if kind == "method":
+        body = "\n".join("    " + line for line in source.strip().splitlines())
+        return (
+            "public class Snippet {\n"
+            f"{body}\n"
+            "    public static void main(String[] args) {\n"
+            '        System.out.println("（片段已编译通过；它为方法声明，未调用）");\n'
+            "    }\n"
+            "}\n"
+        )
+
+    # 普通语句：包成 main
     body = "\n".join("        " + line for line in source.splitlines())
     return (
         "public class Snippet {\n"
@@ -111,6 +168,17 @@ def run_snippet(
             )
         except subprocess.TimeoutExpired:
             return f"运行超时（{timeout_seconds} 秒），已强制终止。"
+
+        # 编译过了但没有 main：这是"类型声明片段"的常态（贴一个 record /
+        # interface 问写法对不对）。直接把 JDK 那句"找不到 main 方法"
+        # 抛给用户没有意义——他本来就没想运行它。
+        combined = (run.stderr or "") + (run.stdout or "")
+        if run.returncode != 0 and "找不到 main 方法" in combined:
+            return (
+                "编译通过（没有诊断信息）。\n"
+                f"这段是类型声明（{main_class}），没有 main 方法，因此不执行。\n"
+                "想运行它，请补一个 main 并用 java_run_snippet 提交完整代码。"
+            )
 
         parts = [f"退出码：{run.returncode}"]
         if run.stdout:
