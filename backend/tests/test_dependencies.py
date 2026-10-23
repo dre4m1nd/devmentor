@@ -23,7 +23,6 @@ PKG = BACKEND / "devmentor"
 #: import 名 -> PyPI 包名（两者不一致时需要映射）
 IMPORT_TO_PACKAGE = {
     "agentscope": "agentscope",
-    "pydantic": "pydantic",
     "tree_sitter": "tree-sitter",
     "tree_sitter_java": "tree-sitter-java",
 }
@@ -90,3 +89,37 @@ def test_pyproject_is_valid_toml():
     cfg = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
     assert cfg["project"]["requires-python"] == ">=3.11"
     assert cfg["project"]["dependencies"]
+
+# ---------------------------------------------------------------- 无用依赖
+
+def test_no_unused_runtime_dependencies():
+    """声明的运行时依赖都应该真的被 import。
+
+    曾经声明过 pydantic（agentscope 的传递依赖，代码没直接用）
+    和 tomli（requires-python 已是 >=3.11，永远用不上）。
+    多余声明会增大安装体积与攻击面，也让人误以为项目直接依赖它们。
+    """
+    import sys
+
+    declared = _declared_deps()
+    imports = _runtime_imports()
+
+    unused = []
+    for d in declared:
+        pkg = d.split(">")[0].split("=")[0].split("<")[0].split("[")[0].strip()
+        mod = IMPORT_TO_PACKAGE.get(pkg, pkg.replace("-", "_"))
+        if mod not in imports:
+            unused.append(pkg)
+
+    assert not unused, f"这些依赖声明了但代码没 import: {unused}"
+
+
+def test_python_requirement_excludes_old_versions():
+    """requires-python 是 3.11+，就不该留 3.10 及以下的兼容依赖。"""
+    cfg = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
+    requires = cfg["project"]["requires-python"]
+
+    assert "3.11" in requires or "3.12" in requires
+    # tomli 是 tomllib 的 3.10 替代品，3.11+ 用不上
+    for d in cfg["project"]["dependencies"]:
+        assert "tomli" not in d.lower(), "3.11+ 不需要 tomli，标准库已有 tomllib"
