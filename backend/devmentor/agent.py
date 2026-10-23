@@ -24,6 +24,7 @@ from agentscope.model import (
     OllamaChatModel,
     OpenAIChatModel,
 )
+from agentscope.skill._local_loader import LocalSkillLoader
 from agentscope.tool import FunctionTool, Toolkit
 
 from .config import CredentialStore, Settings, effective_provider, provider_by_name
@@ -224,14 +225,17 @@ def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
             is_read_only=True,
         ),
     ]
-    # 把落盘的技能接进 Toolkit：工作区 skills/<name>/SKILL.md 会被解析成
-    # 可用技能，模型通过 skill viewer 读取。没有 skills 目录时传空列表。
+    # 把落盘的技能接进 Toolkit。
+    #
+    # 工作区结构是 skills/<name>/SKILL.md（每个技能一个子目录），
+    # 而 LocalSkillLoader 需要 scan_subdir=True 才会识别这种嵌套，
+    # 否则 list_skills() 返回空（传单个文件路径同样无效）。
     skills_dir = ws / "skills"
-    skill_paths: list[str] = []
-    if skills_dir.is_dir():
-        skill_paths = [str(p) for p in sorted(skills_dir.glob("*/SKILL.md"))]
+    loaders = []
+    if skills_dir.is_dir() and any(skills_dir.glob("*/SKILL.md")):
+        loaders.append(LocalSkillLoader(str(skills_dir), scan_subdir=True))
 
-    return Toolkit(tools=tools, skills_or_loaders=skill_paths or None)
+    return Toolkit(tools=tools, skills_or_loaders=loaders or None)
 
 
 def _wrap(fn):
