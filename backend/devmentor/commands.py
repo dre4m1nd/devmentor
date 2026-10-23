@@ -101,7 +101,7 @@ class CommandHandler:
             # 先存好当前会话，再强制开新的；旧会话留在磁盘上可回看
             service.save_state()
             service.reset_agent()
-            new_id = service.start_new_session()
+            new_id = service.start_new_session(args[0] if args else "")
             await service.ready_event()
             # 立刻落一份空状态，保证这个会话在磁盘上存在
             service.save_state(create_if_missing=True)

@@ -87,13 +87,15 @@ class AgentService:
         self.save_state(create_if_missing=True)
         return proto.ready(session, self._settings.model_id)
 
-    def start_new_session(self) -> str:
+    def start_new_session(self, name: str = "") -> str:
         """强制开一个新会话，不接续历史。
 
-        /new 用它：直接生成新 id 并记为当前会话，
+        /new [名字] 用它：直接生成新 id 并记为当前会话，
         之后再调 ready_event 就不会走"恢复最近会话"的分支。
+
+        name 非空时作为 id 前缀，方便在 .devmentor/state 里认出这是哪次对话。
         """
-        self._settings.session_id = _new_session_id(self._settings.user_id)
+        self._settings.session_id = _new_session_id(self._settings.user_id, name)
         return self._settings.session_id
 
     def _continue_or_new_session(self) -> str:
@@ -284,21 +286,37 @@ class AgentService:
 _session_counter = 0
 
 
-def _new_session_id(user_id: str) -> str:
+def _sanitize_session_prefix(name: str) -> str:
+    """把用户给的名字变成安全的 id 前缀。
+
+    只保留字母、数字、中文与连字符下划线；其余换成 -，长度截到 20。
+    空名字返回空串（调用方回退到默认前缀）。
+    """
+    import re
+
+    cleaned = re.sub(r"[^\w\u4e00-\u9fff-]+", "-", (name or "").strip())
+    cleaned = cleaned.strip("-")
+    return cleaned[:20]
+
+
+def _new_session_id(user_id: str, name: str = "") -> str:
     """生成会话 id。
 
-    格式：mentor-YYYYMMDD-HHMMSS-微秒-序号
+    格式：[前缀-]YYYYMMDD-HHMMSS-微秒-序号
 
     为什么要带序号：某些 Python 版本（实测 3.12）在同一进程里连续调用
     datetime.now() 时微秒不前进，连开两个会话会拿到完全相同的 id，
     进而让后一个会话的状态覆盖前一个。加进程内自增序号可彻底避免。
+
+    前缀来自 /new [名字]，方便在状态目录里一眼看出这是哪次对话。
     """
     global _session_counter
     from datetime import datetime
 
     _session_counter += 1
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    return f"mentor-{stamp}-{_session_counter}"
+    prefix = _sanitize_session_prefix(name) or "mentor"
+    return f"{prefix}-{stamp}-{_session_counter}"
 
 
 def _mask(key: str) -> str:
