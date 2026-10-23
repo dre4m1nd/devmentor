@@ -5,8 +5,8 @@
   "description": "DevMentor - terminal programming mentor. Python agent backend + Ink frontend.",
   "scripts": {
     "build": "npm --prefix frontend run build",
-    "test": "cd backend && python -m pytest tests/ -q",
-    "test:fast": "cd backend && python -m pytest tests/ -q -m 'not e2e'",
+    "test": "cd backend && python -m pytest tests/ -q && cd ../frontend && npm test",
+    "test:fast": "cd backend && python -m pytest tests/ -q -m 'not e2e' && cd ../frontend && npm test",
     "start": "node frontend/dist/cli.js"
   }
 }

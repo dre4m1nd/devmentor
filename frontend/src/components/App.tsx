@@ -33,6 +33,8 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
 
   // 流式文本：模型输出是增量事件，累积起来当作一条 assistant 记录
   const streamBuf = useRef('');
+  // 当前正在流式输出的 assistant 条目下标；-1 表示没有
+  const streamingIdx = useRef(-1);
   const backendRef = useRef<Backend | null>(null);
 
   const push = useCallback((entry: Entry) => {
@@ -42,9 +44,19 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
   const flushStream = useCallback(() => {
     const text = streamBuf.current.trim();
     streamBuf.current = '';
-    if (text) {
-      setEntries((prev) => [...prev, { kind: 'assistant', text }]);
-    }
+    const idx = streamingIdx.current;
+    streamingIdx.current = -1;
+
+    if (!text) return;
+
+    // 流式期间已经渲染过这条内容，flush 只做收尾（保留已渲染的那条），
+    // 不能再 push 一条，否则每条回复都会重复两遍。
+    setEntries((prev) => {
+      if (idx >= 0 && idx < prev.length && prev[idx]?.kind === 'assistant') {
+        return prev;   // 已经在位，不动
+      }
+      return [...prev, { kind: 'assistant', text }];
+    });
   }, []);
 
   const handleEvent = useCallback(
@@ -63,12 +75,19 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
 
         case 'text.delta':
           streamBuf.current += event.text;
-          // 立刻反映到界面：把缓冲区当成临时 assistant 记录渲染
+          // 用 ref 记住"当前正在流式的条目下标"，直接原地更新它。
+          //
+          // 之前靠判断 last.streaming，但条目上根本没设这个字段，
+          // 导致每个 delta 都 push 一条新记录——一段 200 字的回复会变成
+          // 几十条重复条目铺满屏幕（实测 20 个 delta 出 20 条）。
           setEntries((prev) => {
-            const last = prev[prev.length - 1];
-            if (last?.kind === 'assistant' && (last as { streaming?: boolean }).streaming) {
-              return [...prev.slice(0, -1), { kind: 'assistant', text: streamBuf.current }];
+            const idx = streamingIdx.current;
+            if (idx >= 0 && idx < prev.length && prev[idx]?.kind === 'assistant') {
+              const next = prev.slice();
+              next[idx] = { kind: 'assistant', text: streamBuf.current };
+              return next;
             }
+            streamingIdx.current = prev.length;
             return [...prev, { kind: 'assistant', text: streamBuf.current }];
           });
           break;
