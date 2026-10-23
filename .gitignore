@@ -52,4 +52,4 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-### 旧的 Java 版本（重构后保留在 git 历史里） ###
+### 旧的 Java 版本（重构后保留在 git 历史里） ###tmp_*.txt
