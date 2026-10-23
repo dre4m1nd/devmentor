@@ -32,6 +32,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "e2e: 起真实子进程的端到端测试，较慢（用 -m 'not e2e' 跳过）",
+    "slow: 构建 wheel 等耗时操作（用 -m 'not slow' 跳过）",
 ]
 
 [tool.ruff]
