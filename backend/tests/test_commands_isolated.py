@@ -78,13 +78,6 @@ def test_login_without_key_cancels(tmp_path: Path):
     assert store.find("openai") is None
 
 
-def test_login_invalid_provider_id(tmp_path: Path):
-    s, store, svc, cmds = _ctx(tmp_path)
-    events = _drain(cmds.apply_login(999, "k", svc))
-
-    assert any(e.type == "error" for e in events)
-
-
 # ---------------------------------------------------------------- logout
 
 def test_logout_removes_only_target(tmp_path: Path):

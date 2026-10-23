@@ -86,6 +86,11 @@ def test_login_ollama_needs_no_key(tmp_path):
 
 
 def test_login_invalid_provider_id(tmp_path):
+    """无效厂商号必须报错且不改动当前模型。
+
+    这条比 test_commands_isolated 里的同名版本更严格（还校验模型未变），
+    所以保留这份，另一份已删。
+    """
     s, store, svc, cmds = _ctx(tmp_path)
     before = s.model_id
 
