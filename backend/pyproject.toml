@@ -25,6 +25,9 @@ packages = ["devmentor"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "e2e: 起真实子进程的端到端测试，较慢（用 -m 'not e2e' 跳过）",
+]
 
 [tool.ruff]
 line-length = 100
