@@ -56,3 +56,4 @@ venv/
 
 ### 临时文件 ###
 tmp_*.txt
+msg*.txt
