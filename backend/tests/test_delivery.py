@@ -6,7 +6,7 @@
 
 发现的过时项：
   .gitattributes 里写着 /mvnw text eol=lf，
-  但 mvnw 已随 Java 版归档到 legacy/，路径失效。
+  但 mvnw 已随 Java 版一起删除，路径失效。
   *.cmd 也从多个变成只剩 legacy/bin/devmentor.cmd 一个。
 """
 
@@ -102,10 +102,14 @@ def test_ts_files_use_lf():
     assert not bad, f"这些 .ts/.tsx 含 CRLF: {bad[:5]}"
 
 
-def test_cmd_files_use_crlf():
-    """cmd 脚本必须是 CRLF，否则 Windows 命令行可能解析出错。"""
-    bad = [f for f in _git_ls("*.cmd") if not _has_crlf(ROOT / f)]
-    assert not bad, f"这些 .cmd 是 LF: {bad}"
+def test_no_cmd_files_remain():
+    """Java 版启动脚本已删，仓库里不该再有 .cmd 文件。
+
+    查工作区而不是 git 索引：刚删掉的文件还在索引里，
+    但工作区没有就说明已经清了。
+    """
+    cmds = [p for p in ROOT.rglob("*.cmd") if "node_modules" not in str(p)]
+    assert not cmds, f"这些 .cmd 是 Java 版遗留: {cmds}"
 
 
 def test_markdown_files_use_lf():

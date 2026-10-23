@@ -91,6 +91,7 @@ def test_readme_documents_current_install_path():
     assert "java -jar" not in install
 
 
-def test_readme_mentions_legacy_dir():
+def test_readme_does_not_mention_legacy():
+    """legacy/ 目录已整体删除，README 不该再提它。"""
     text = _readme()
-    assert "legacy/" in text
+    assert "legacy" not in text

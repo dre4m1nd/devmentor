@@ -59,9 +59,7 @@ def test_install_script_writes_devmentor_command():
 
         # 不该再引用 Java 版 JAR
         assert "devmentor.jar" not in text, f"{name} 仍在引用废弃的 Java JAR"
-        assert "mvn" not in text.lower() or "legacy" in text, (
-            f"{name} 仍在调用 Maven"
-        )
+        assert "mvn" not in text.lower(), f"{name} 仍在调用 Maven"
 
 
 @pytest.mark.parametrize("name", ["install.ps1", "install.sh"])

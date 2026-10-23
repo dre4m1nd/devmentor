@@ -29,7 +29,6 @@ $ devmentor
 | --- | --- |
 | `backend/` | Python agent 服务（核心） |
 | `frontend/` | Node + Ink 终端 UI |
-| `legacy/` | 重构前的 Java 版，已废弃，见 [legacy/README.md](legacy/README.md) |
 
 ---
 
