@@ -6,16 +6,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import AsyncIterator
 
 from agentscope.message import UserMsg
 
 from . import protocol as proto
 from .agent import MissingCredential, build_agent
-from .config import CredentialStore, Settings, provider_by_id, provider_by_name
-from .protocol import Event, MenuOption, ToolState
-from .store import SessionStore, default_store
+from .config import CredentialStore, Settings
+from .protocol import Event, ToolState
+from .store import default_store
 from .workspace import Workspace
 
 # AgentScope 事件类型 -> 我们的处理方式（用 isinstance 更稳，但这里只需 type 名）

@@ -5,9 +5,6 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-from typing import Any
 
 from agentscope.agent import Agent
 from agentscope.credential import (
@@ -27,7 +24,7 @@ from agentscope.model import (
 from agentscope.skill._local_loader import LocalSkillLoader
 from agentscope.tool import FunctionTool, Toolkit
 
-from .config import CredentialStore, Settings, effective_provider, provider_by_name
+from .config import CredentialStore, Settings, effective_provider
 from .tools import ArchitectureTools, CurriculumTools, ProgressTools, compile_check, run_snippet
 from .workspace import Workspace
 
