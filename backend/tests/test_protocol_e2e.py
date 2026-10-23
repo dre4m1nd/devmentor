@@ -151,3 +151,25 @@ def test_ask_always_emits_turn_end(sandbox: Path):
 def test_unknown_command_reports_error(sandbox: Path):
     events = _run([{'type': 'command', 'name': 'nonexistent', 'args': []}], sandbox)
     assert any(e.get('type') == 'error' for e in events)
+
+def test_interrupt_request_is_handled(sandbox: Path):
+    """interrupt 必须产生 turn.end，否则前端停在 busy 无法恢复。"""
+    events = _run([{'type': 'interrupt'}], sandbox)
+
+    kinds = [e.get('type') for e in events]
+    assert 'turn.end' in kinds, 'interrupt 后必须发 turn.end'
+    assert 'system' in kinds, '应提示已中断'
+    assert not any(k == 'error' for k in kinds)
+
+
+def test_interrupt_does_not_break_subsequent_commands(sandbox: Path):
+    events = _run(
+        [
+            {'type': 'interrupt'},
+            {'type': 'command', 'name': 'session', 'args': []},
+        ],
+        sandbox,
+    )
+
+    texts = [e.get('text', '') for e in events if e.get('type') == 'system']
+    assert any('用户' in t for t in texts), '中断后命令仍应可用'

@@ -193,6 +193,28 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
     [push],
   );
 
+  // Ctrl+C 语义：忙时打断当前回答，空闲时退出程序。
+  //
+  // 之前只有进程级 SIGINT，而 Ink 开了 exitOnCtrlC:false，导致：
+  //   - 忙时按 Ctrl+C 不会中断，只能干等
+  //   - 空闲时按 Ctrl+C 行为依赖外部信号，不可靠
+  // 统一在组件层处理，两条路径都明确。
+  useInput(
+    (inputChar, key) => {
+      if (!(key.ctrl && inputChar === 'c')) return;
+      const backend = backendRef.current;
+      if (!backend) return;
+      if (busy) {
+        backend.interrupt();
+        setPendingCalls(null);
+        setActiveMenu(null);
+      } else {
+        backend.shutdown();
+      }
+    },
+    { isActive: !exited },
+  );
+
   // 菜单模式：↑↓ 选择，回车确认，Esc 取消
   useInput(
     (_inputChar, key) => {

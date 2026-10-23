@@ -1,0 +1,32 @@
+fix: 接通中断链路，Ctrl+C 忙时打断、空闲时退出
+
+协议里定义了 interrupt 请求类型，前端也留了 SIGINT 处理，但整条链路
+没接通：
+
+- server 主循环只处理 ask/command/confirm/shutdown，interrupt 被静默忽略
+- backend.ts 没有 interrupt() 方法，前端根本发不出去
+- cli.tsx 的 SIGINT 直接 process.exit(0)，而注释写的是
+  "中断当前请求而不是直接退出"
+- Ink 开了 exitOnCtrlC:false，指望外部信号本来就不可靠
+
+用户能感知到的后果：想看模型回答时按 Ctrl+C，期望停止回答，
+实际把整个程序关掉了；而且没有任何中断方式。
+
+修复：
+- server 处理 interrupt：清 pending 确认 + 落盘 + 发 system 与 turn.end
+  （turn.end 是关键，否则前端停在 busy 永远恢复不了）
+- service 新增 interrupt()，用 create_if_missing=True 落盘，
+  保证还没建 Agent 就中断也有记录
+- backend.ts 新增 interrupt()
+- App 统一处理 Ctrl+C：busy 时发 interrupt 并清界面状态，
+  空闲时发 shutdown。两条路径都明确，不再依赖进程信号
+
+实测：
+  单发 interrupt  -> system -> turn.end   OK
+  interrupt 后继续用 -> 会话信息正常返回   OK
+  连发两次 interrupt -> 无 error           OK
+  前端空闲 Ctrl+C -> 请求序列含 shutdown   OK
+
+新增 7 个测试（5 个单元 + 2 个 e2e 协议）。
+
+测试：后端 172 快测 + 9 e2e = 181 全通过，前端 tsc 零错误。

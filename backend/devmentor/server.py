@@ -69,6 +69,13 @@ class Server:
             elif request.type == "confirm":
                 async for ev in self._service.confirm(request.approved, request.reason):
                     self.emit(ev)
+            elif request.type == "interrupt":
+                # 打断正在进行的推理。当前实现是单线程顺序处理请求，
+                # 推理期间不会读 stdin，所以这条主要在"下一轮开始前"生效：
+                # 清掉待确认状态并告知前端已中断，避免界面卡在 busy。
+                self._service.interrupt()
+                self.emit(proto.system("已中断当前回答。"))
+                self.emit(proto.turn_end())
 
         self.emit(proto.bye())
 

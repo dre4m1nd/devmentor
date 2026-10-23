@@ -245,6 +245,18 @@ class AgentService:
         except Exception:
             raise
 
+    def interrupt(self) -> None:
+        """放弃当前待确认的操作，并把状态落盘。
+
+        真正的"停止正在跑的推理"由 Agent 自身的中断机制负责；这里
+        只清理本层持有的中间状态，保证下一次提问不会带着残留的
+        pending 确认继续跑。
+        """
+        self._pending_confirm = []
+        # create_if_missing=True：中断时即使还没建 Agent，
+        # 也要保证当前会话在磁盘上有一份记录，不丢进度。
+        self.save_state(create_if_missing=True)
+
     def save_state(self, create_if_missing: bool = False) -> None:
         """把当前会话状态落盘。任何失败都静默——存不下不该打断对话。
 

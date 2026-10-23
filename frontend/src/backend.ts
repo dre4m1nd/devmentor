@@ -90,6 +90,11 @@ export class Backend {
     this.send({ type: 'confirm', approved, reason });
   }
 
+  /** 打断当前回答。后端会清掉待确认状态并发 turn.end，界面即可恢复输入。 */
+  interrupt(): void {
+    this.send({ type: 'interrupt' });
+  }
+
   shutdown(): void {
     this.send({ type: 'shutdown' });
     // 给后端一点时间优雅退出，超时强杀

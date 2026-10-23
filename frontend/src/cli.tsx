@@ -68,7 +68,8 @@ function main(): void {
     { exitOnCtrlC: false },
   );
 
-  // Ctrl+C 交给 Ink 自己处理（中断当前请求而不是直接退出）
+  // Ctrl+C：App 内部会在忙时拦截（转成 interrupt 请求）；
+  // 只有空闲状态下的 SIGINT 才会走到这里退出。
   process.on('SIGINT', () => {
     instance.unmount();
     process.exit(0);
