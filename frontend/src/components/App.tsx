@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp, useInput, useStdout } from 'ink';
 
 import { Backend } from '../backend.js';
 import { parseCommand } from '../commands.js';
@@ -18,6 +18,18 @@ export type AppProps = {
 
 export function App({ backendDir, python, projectRoot }: AppProps): React.ReactElement {
   const { exit } = useApp();
+  const { stdout } = useStdout();
+  // 终端列数；窄屏时菜单改成纵向排布。
+  // 阈值取 80：横排需要 2(marker) + 32(label) + 最长 URL(~44) ≈ 78 列，
+  // 70 列时 URL 会被截断（实测）。
+  const [columns, setColumns] = useState(stdout?.columns ?? 80);
+  useEffect(() => {
+    if (!stdout) return;
+    const onResize = () => setColumns(stdout.columns ?? 80);
+    stdout.on('resize', onResize);
+    return () => { stdout.off('resize', onResize); };
+  }, [stdout]);
+  const narrow = columns < 80;
   const [info, setInfo] = useState<ReadyInfo | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [busy, setBusy] = useState(false);
@@ -317,21 +329,44 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
           <Text bold color={theme.accent}>
             {activeMenu.title}
           </Text>
-          {activeMenu.options.map((o, i) => (
-            <Box key={o.value}>
-              <Box width={2}>
-                <Text color={i === activeMenu.selected ? theme.accent : theme.muted}>
-                  {i === activeMenu.selected ? '❯' : ' '}
-                </Text>
+          {activeMenu.options.map((o, i) => {
+            const selected = i === activeMenu.selected;
+            const marker = selected ? '❯' : ' ';
+            // 窄屏（< 70 列）下把描述折到下一行。
+            // 横排时厂商名和 URL 会交错折行，读起来分不清哪个是哪个。
+            if (narrow) {
+              return (
+                <Box key={o.value} flexDirection="column">
+                  <Box>
+                    <Box width={2}>
+                      <Text color={selected ? theme.accent : theme.muted}>{marker}</Text>
+                    </Box>
+                    <Text bold={selected} color={selected ? theme.accent : undefined}>
+                      {o.label}
+                    </Text>
+                  </Box>
+                  {o.desc ? (
+                    <Box marginLeft={2}>
+                      <Text color={theme.muted}>{o.desc}</Text>
+                    </Box>
+                  ) : null}
+                </Box>
+              );
+            }
+            return (
+              <Box key={o.value}>
+                <Box width={2}>
+                  <Text color={selected ? theme.accent : theme.muted}>{marker}</Text>
+                </Box>
+                <Box width={32}>
+                  <Text bold={selected} color={selected ? theme.accent : undefined}>
+                    {o.label}
+                  </Text>
+                </Box>
+                <Text color={theme.muted}>{o.desc ?? ''}</Text>
               </Box>
-              <Box width={32}>
-                <Text bold={i === activeMenu.selected} color={i === activeMenu.selected ? theme.accent : undefined}>
-                  {o.label}
-                </Text>
-              </Box>
-              <Text color={theme.muted}>{o.desc ?? ''}</Text>
-            </Box>
-          ))}
+            );
+          })}
           <Box marginTop={1}>
             <Text color={theme.muted}>↑↓ 选择，回车确认，Esc 取消</Text>
           </Box>
