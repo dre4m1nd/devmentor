@@ -1,15 +1,10 @@
 [project]
 name = "devmentor-backend"
 version = "2.0.0"
-description = "DevMentor agent service - terminal programming mentor with architecture review"
+description = "DevMentor agent service - a terminal programming mentor that actually runs your code"
 requires-python = ">=3.11"
 dependencies = [
     "agentscope>=2.0.10",
-    # 架构分析用 tree-sitter 解析 Java 语法树。
-    # agentscope 自身依赖 tree_sitter，但**不含** tree_sitter_java，
-    # 必须显式声明，否则 devmentor.arch.scanner 在 import 时就失败。
-    "tree-sitter>=0.23",
-    "tree-sitter-java>=0.23",
 ]
 
 [project.optional-dependencies]

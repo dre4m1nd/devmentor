@@ -16,9 +16,6 @@ DEFINITIONS: list[tuple[str, str, str]] = [
     ("/new", "/new [名字]", "开启新会话"),
     ("/reset", "/reset", "清空当前会话上下文"),
     ("/mode", "/mode <interactive|read-only|full>", "切换权限档位"),
-    ("/arch", "/arch [路径]", "架构评审：静态分析当前项目"),
-    ("/lesson", "/lesson [slug]", "列出或阅读课程"),
-    ("/progress", "/progress", "查看学习进度"),
     ("/login", "/login", "登录：选择厂商并输入 API Key"),
     ("/logout", "/logout [厂商]", "清除已保存的 API Key"),
     ("/model", "/model [id]", "查看或切换模型"),
@@ -33,17 +30,8 @@ DEFINITIONS: list[tuple[str, str, str]] = [
 #: 真实注册的工具名。与 agent.build_toolkit 保持一致，
 #: 改工具时只需改这里与那边两处（有测试约束，见 tests/test_commands.py）。
 TOOL_NAMES = [
-    "curriculum_list",
-    "curriculum_read",
-    "progress_read",
-    "progress_record",
     "java_run_snippet",
     "java_compile_check",
-    "arch_scan",
-    "arch_findings",
-    "arch_dependencies",
-    "arch_file_profile",
-    "arch_read_source",
 ]
 
 
@@ -159,31 +147,6 @@ class CommandHandler:
         if name == "logout":
             async for ev in self._handle_logout(args, service):
                 yield ev
-            return
-
-        if name == "arch":
-            path = args[0] if args else None
-            from .tools import ArchitectureTools
-
-            tool = ArchitectureTools(self._settings.project_dir, self._settings.workspace_dir / "reports")
-            yield proto.system(tool.scan(path))
-            return
-
-        if name == "lesson":
-            from .tools import CurriculumTools
-
-            tool = CurriculumTools(self._settings.workspace_dir)
-            if not args:
-                yield proto.system(tool.list_courses())
-            else:
-                yield proto.system(tool.read_course(args[0]))
-            return
-
-        if name == "progress":
-            from .tools import ProgressTools
-
-            tool = ProgressTools(self._settings.workspace_dir)
-            yield proto.system(tool.read_progress())
             return
 
         yield proto.error(f"未知命令 /{name}。输入 / 查看全部命令。")

@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """打包完整性：pip install . 后模板必须可用。
 
-模板（8 篇课程 + 4 个技能 + AGENTS.md + preferences.md）是工作区的来源，
-丢失会导致首次启动什么都读不到。依赖 hatchling 的默认行为把包目录下的
+模板（AGENTS.md + preferences.md）是工作区的来源，丢失会导致首次启动
+读不到系统提示词、退回兜底 prompt。依赖 hatchling 的默认行为把包目录下的
 非 Python 文件一并打进 wheel——这属于隐式依赖，用测试锁住。
+
+2026-10 裁掉了课程（8 篇）与技能（4 个），模板从 14 个降到 2 个。
 """
 
 from __future__ import annotations
@@ -16,11 +18,11 @@ import pytest
 BACKEND = Path(__file__).resolve().parents[1]
 TEMPLATES = BACKEND / "devmentor" / "templates"
 
-EXPECTED_TEMPLATE_COUNT = 14  # AGENTS.md + preferences.md + 8 课程 + 4 技能
+EXPECTED_TEMPLATE_COUNT = 2  # AGENTS.md + preferences.md
 
 
 def test_templates_directory_exists():
-    assert TEMPLATES.is_dir(), "模板目录缺失，首次启动会没有课程和技能"
+    assert TEMPLATES.is_dir(), "模板目录缺失，首次启动会没有系统提示词"
 
 
 def test_all_templates_present():
@@ -30,20 +32,22 @@ def test_all_templates_present():
     )
 
 
-def test_curriculum_has_8_courses():
-    courses = list((TEMPLATES / "curriculum").glob("*.md"))
-    assert len(courses) == 8, f"课程应有 8 篇，实际 {len(courses)}"
-
-
-def test_skills_have_skill_md():
-    """每个技能目录都要有 SKILL.md，否则技能加载不到。"""
-    skills = list((TEMPLATES / "skills").glob("*/SKILL.md"))
-    assert len(skills) == 4, f"技能应有 4 个，实际 {len(skills)}"
+def test_no_curriculum_or_skills_templates():
+    """课程与技能已删除，模板目录里不该再有它们。"""
+    assert not (TEMPLATES / "curriculum").exists(), "curriculum 已删"
+    assert not (TEMPLATES / "skills").exists(), "skills 已删"
 
 
 def test_agents_md_present():
     """AGENTS.md 是系统提示词来源，缺失会退回兜底 prompt。"""
     assert (TEMPLATES / "AGENTS.md").is_file()
+
+
+def test_agents_md_has_no_removed_tools():
+    """打包出去的提示词不能提已删除的工具。"""
+    text = (TEMPLATES / "AGENTS.md").read_text(encoding="utf-8")
+    for gone in ("arch_scan", "curriculum_list", "progress_record"):
+        assert gone not in text, f"AGENTS.md 仍提到 {gone}"
 
 
 def test_workspace_bootstrap_finds_templates():
@@ -87,5 +91,3 @@ def test_wheel_contains_templates(tmp_path):
             f"wheel 里应含 {EXPECTED_TEMPLATE_COUNT} 个模板，实际 {len(tpl)}"
         )
         assert any(n.endswith("AGENTS.md") for n in tpl)
-        assert any("curriculum" in n for n in tpl)
-        assert any("skills" in n for n in tpl)

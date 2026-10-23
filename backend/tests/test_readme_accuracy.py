@@ -47,45 +47,38 @@ def _count_frontend_tests() -> int:
 # ---------------------------------------------------------------- 数字一致
 
 def test_readme_test_count_matches_reality():
-    """README 提到的测试数必须接近实际（允许注释写法差异）。"""
+    """README 若写了测试数，必须与实际接近。
+
+    README 现在不写具体数字（写死就会过期——曾经写着 77，实际已 364）。
+    所以这条只做"写了就必须对"的检查。
+    """
     text = _readme()
     actual = _count_test_functions()
-
-    # README 里形如 "364 个用例" 或 "354 个测试"
     numbers = [int(n) for n in re.findall(r"(\d+)\s*个(?:测试|用例)", text)]
 
-    assert numbers, "README 里没有提到测试数量"
-    # 至少有一个数字与实际接近（差 20% 以内）
-    close = any(abs(n - actual) / actual <= 0.2 for n in numbers)
-    assert close, f"README 说 {numbers}，实际后端 {actual} 个"
-
+    for n in numbers:
+        assert abs(n - actual) / actual <= 0.2, (
+            f"README 说 {n} 个测试，实际 {actual} 个"
+        )
 
 def test_readme_tool_count_matches_reality():
     text = _readme()
-    actual = 11  # 由 build_toolkit 注册
+    actual = 2  # java_run_snippet / java_compile_check
 
     numbers = [int(n) for n in re.findall(r"(\d+)\s*个工具", text)]
     assert numbers, "README 没提工具数"
     assert any(n == actual for n in numbers), f"README 说 {numbers}，实际 {actual}"
 
 
-def test_readme_rule_count_matches_reality():
+def test_no_curriculum_or_skills():
+    """课程与技能已删除，模板里不该再有，README 也不该宣传。"""
+    tpl = BACKEND / "devmentor" / "templates"
+    assert not (tpl / "curriculum").exists()
+    assert not (tpl / "skills").exists()
+
     text = _readme()
-    m = re.search(r"规则（(\d+) 条）", text)
-    assert m, "README 没提规则数"
-    assert int(m.group(1)) == 9, "规则数应是 9 条"
-
-
-def test_readme_curriculum_count():
-    text = _readme()
-    actual = len(list((BACKEND / "devmentor" / "templates" / "curriculum").glob("*.md")))
-    assert actual == 8, f"课程数应为 8，实际 {actual}"
-    assert "8 篇" in text or "8 篇课程" in text
-
-
-def test_readme_skill_count():
-    actual = len(list((BACKEND / "devmentor" / "templates" / "skills").iterdir()))
-    assert actual == 4, f"技能数应为 4，实际 {actual}"
+    for gone in ("课程", "技能", "curriculum", "skills", "架构评审", "架构规则"):
+        assert gone not in text, f"README 仍在宣传已删除的功能: {gone}"
 
 
 # ---------------------------------------------------------------- 命令可用

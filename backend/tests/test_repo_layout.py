@@ -62,14 +62,14 @@ def test_backend_does_not_reference_legacy_java():
         assert "legacy/java-src" not in text, f"{py.name} 引用了归档的 Java 代码"
 
 
-def test_templates_not_duplicated_from_legacy():
-    """当前版本的模板以 backend/devmentor/templates 为准。"""
+def test_templates_are_minimal():
+    """课程与技能已删，模板只剩 AGENTS.md 与 preferences.md。"""
     current = ROOT / "backend" / "devmentor" / "templates"
     assert current.is_dir()
-
     assert (current / "AGENTS.md").is_file()
-    assert (current / "curriculum").is_dir()
-    assert (current / "skills").is_dir()
+    assert (current / "preferences.md").is_file()
+    assert not (current / "curriculum").exists()
+    assert not (current / "skills").exists()
 
 
 def test_readme_documents_legacy_dir():

@@ -1,6 +1,6 @@
 # DevMentor · 编程导师终端智能体
 
-终端里的编程学习伙伴。它不只回答问题，还会**真的编译并运行代码**验证自己说的话，能按课程大纲带你学、出带验收标准的练习、跨会话记得你学到哪。
+终端里的编程导师。它不只回答问题——任何"这段能跑"的说法，都会**先用 javac 真编译、真运行一遍**再讲。
 
 在终端敲一行就能开始：
 
@@ -10,14 +10,16 @@ $ devmentor
 
 ---
 
-## 内置能力
+## 它做什么
 
-| 类别 | 数量 | 说明 |
-| --- | --- | --- |
-| Agent 工具 | 11 个 | 教学验证、课程、进度、架构评审四类 |
-| 架构规则 | 9 条 | 全部确定性判断，每条带数字证据 |
-| 课程 | 8 篇 | 语法与类型 → OOP → 集合泛型 → Stream → 异常IO → 并发 → JVM → 测试与Spring |
-| 技能 | 4 个 | 代码评审、调试教练、出题助手、架构评审 |
+| 能力 | 说明 |
+| --- | --- |
+| 代码真跑验证 | 用 JDK 编译并运行你贴的 Java 代码，返回退出码 / stdout / stderr |
+| 编译诊断 | 只编译不运行，给出 行:列 级别的报错 |
+| 跨会话记忆 | 学到哪、聊过什么，重启后上下文还在 |
+| 6 个模型厂商 | OpenRouter / DeepSeek / DashScope / OpenAI / Anthropic / 本地 Ollama |
+
+**不想注册任何服务也能用**：`/login` 选第 6 项 Ollama，本地模型不要 Key。
 
 ---
 
@@ -25,12 +27,9 @@ $ devmentor
 
 | 目录 | 说明 |
 | --- | --- |
-| `backend/` | Python agent 服务（当前版本的核心） |
+| `backend/` | Python agent 服务（核心） |
 | `frontend/` | Node + Ink 终端 UI |
-| `legacy/` | **重构前的 Java 版，已废弃**，仅供查阅，见 [legacy/README.md](legacy/README.md) |
-
-> Java 版的功能已全部在 `backend/` 中重实现。运行时完全不需要 JDK 以外的 Java 工具链，
-> 也不需要 `pom.xml` 或 Maven。
+| `legacy/` | 重构前的 Java 版，已废弃，见 [legacy/README.md](legacy/README.md) |
 
 ---
 
@@ -49,8 +48,7 @@ $ devmentor
 ┌──────────────┴───────────────┐
 │  backend/   (Python)         │
 │  · AgentScope Agent          │
-│  · 11 个工具                 │
-│  · 架构分析引擎              │
+│  · 2 个工具（都用来跑代码）  │
 └──────────────────────────────┘
 ```
 
@@ -95,14 +93,7 @@ devmentor          # 直接启动，像 claude 一样
 4. 写启动脚本到 `~/.devmentor/bin/devmentor` 并加入 PATH
 
 启动脚本指向**本仓库**的 `frontend/dist/cli.js`，因此 `git pull` 更新代码后
-重新跑一次安装脚本即可。
-
-想换机器位置就设环境变量，启动脚本会优先用它：
-
-```bash
-export DEVMENTOR_PROJECT_ROOT=/path/to/devmentor   # macOS / Linux
-set DEVMENTOR_PROJECT_ROOT=D:\path\to\devmentor  # Windows
-```
+重新跑一次安装脚本即可。想换机器位置就设 `DEVMENTOR_PROJECT_ROOT`。
 
 #### 卸载
 
@@ -113,43 +104,20 @@ rm -rf ~/.devmentor                    # macOS / Linux
 
 再从「系统属性 → 环境变量」里删掉 PATH 中的 `%USERPROFILE%\.devmentor\bin`。
 
----
-
 #### 手动安装（不用脚本）
 
 ```bash
 git clone https://github.com/dre4m1nd/devmentor.git
 cd devmentor
-
-# 后端依赖（见下方「为什么是这几个包」）
-cd backend
-pip install -e .
-cd ..
-
-# 前端依赖与构建
+cd backend && pip install -e . && cd ..
 cd frontend && npm install && npm run build && cd ..
-
-# 启动（不挂全局命令，手动指定路径）
 node frontend/dist/cli.js
 ```
 
-**为什么是这几个包**：`pip install -e .` 会按 `backend/pyproject.toml` 装齐依赖。请别手动只装 `agentscope pydantic`——架构分析要用 `tree-sitter-java` 解析 Java 语法树，而 `agentscope` 自身**只带 `tree_sitter`，不带 `tree_sitter_java`**。漏装的话，启动不报错，但一用 `/arch` 或 `arch_scan` 就 `ModuleNotFoundError`。
-
-装完可以自查：
+依赖只有一个：`agentscope`。装完可以自查：
 
 ```bash
-cd backend && python -c "import tree_sitter_java; print('ok')"
-```
-
-### 只用一次？不装也行
-
-不想装依赖也能先看看静态分析能力（不调用模型、不需要 API Key）：
-
-```bash
-cd backend && python -m devmentor.server
-# 然后手工喂一行 JSON：
-# {"type":"command","name":"arch","args":[]}
-# {"type":"shutdown"}
+cd backend && python -c "import agentscope; print(agentscope.__version__)"
 ```
 
 ---
@@ -185,8 +153,6 @@ Key 的存储与优先级：
 | --- | --- |
 | `/login` / `/logout [厂商]` | 登录厂商 / 清除凭据 |
 | `/new [名字]` / `/reset` | 开新会话 / 清空当前上下文 |
-| `/arch [路径]` | **架构评审**当前项目 |
-| `/lesson [slug]` / `/progress` | 读课程 / 看学习进度 |
 | `/mode <interactive read-only full>` | 切换权限档位（见下） |
 | `/model [id]` | 查看或切换模型 |
 | `/session` / `/workspace` / `/tools` | 查看会话 / 工作区 / 工具清单 |
@@ -196,33 +162,14 @@ Key 的存储与优先级：
 
 三档在工具层面产生不同的 `PermissionDecision`，不是只改提示文案：
 
-| 档位 | 写类工具（`java_run_snippet`、`progress_record`） | 只读工具 |
+| 档位 | 写类工具（java_run_snippet） | 只读工具 |
 | --- | --- | --- |
-| `interactive`（默认） | **ASK** —— 执行前必须确认，且 bypass-immune（allow 规则不能静默放行） | 直接放行 |
-| `read-only` | **DENY** —— 直接拒绝，模型会收到拒绝原因并换方案 | 直接放行 |
+| `interactive`（默认） | **ASK** —— 执行前必须确认，且 bypass-immune | 直接放行 |
+| `read-only` | **DENY** —— 直接拒绝，模型会收到原因并换方案 | 直接放行 |
 | `full` | **ALLOW** —— 不再询问（谨慎） | 直接放行 |
 
-### 架构评审（核心用法）
-
-```bash
-# 对话中评审当前目录
-/arch
-
-# 指定路径
-/arch D:\my-project
-```
-
-评审分两段，请分清哪部分是证据、哪部分是建议：
-
-1. **项目架构事实**（静态分析，可核对）：包结构、包级依赖图、体量最大的文件、规则命中清单
-2. **架构评审**（模型的判断）：每条缺陷按「证据 / 影响 / 改法 / 顺序」四段写，最后给按「影响 ÷ 成本」排序的优先级表
-
-确定性规则（9 条）：上帝类、超长方法、方法过多（过滤纯 POJO）、包结构平铺、**包级循环依赖**、分层倒置、无测试、无注释、多包根。
-
-> **当前能力边界**：架构分析引擎解析 **Java** 源码；代码真跑验证（`java_run_snippet`）也是 Java。
-> 讲解其它语言没有问题，但这两项能力暂不支持——导师会明确说明，不会假装验证过。
-
-约束模型的铁律：**在没调用 `arch_scan` 之前，不给出任何架构意见。**
+> **能力边界**：代码真跑验证只支持 Java。导师讲解 Python、JS 等其它语言没有问题，
+> 但它会明确说"这段我没有执行过"，不会把没跑过的代码说成已验证。
 
 ---
 
@@ -239,13 +186,8 @@ devmentor/
 │   │   ├── commands.py           斜杠命令
 │   │   ├── config.py             厂商目录、凭据、JDK 查找
 │   │   ├── workspace.py          工作区模板落盘
-│   │   ├── arch/                 架构分析引擎
-│   │   │   ├── scanner.py        tree-sitter 扫描
-│   │   │   ├── model.py          项目快照（纯事实）
-│   │   │   ├── rules.py          9 条规则（纯判断）
-│   │   │   └── analyzer.py       入口与报告
-│   │   └── tools/                11 个 Agent 工具
-│   └── tests/                    34 个测试文件 / 364 个用例
+│   │   └── tools/                java_run_snippet / java_compile_check
+│   └── tests/                    测试
 └── frontend/                     Ink 终端 UI
     └── src/
         ├── types.ts              协议类型
@@ -264,11 +206,11 @@ devmentor/
 | --- | --- | --- |
 | `DEVELOPMENT_MODEL_ID` | `openai:minimax/minimax-m3.1-flash:free` | 模型，`provider:model` 形式 |
 | `DEVELOPMENT_BASE_URL` | OpenRouter 网关 | 自定义 API 地址 |
-| `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` | 空 | 模型密钥（优先于 `/login` 保存的凭据） |
+| `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` | 空 | 模型密钥（优先于 /login 保存的凭据） |
 | `DEVMENTOR_LANGUAGE` | `zh` | 讲解语言，`zh` 或 `en` |
 | `DEVMENTOR_PERMISSION_MODE` | `interactive` | 权限档位，见上文 |
 | `DEVMENTOR_PROJECT_ROOT` | 当前目录 | 导师读写的代码目录 |
-| `DEVMENTOR_WORKSPACE` | `.devmentor/workspace` | 课程、技能、进度所在目录 |
+| `DEVMENTOR_WORKSPACE` | `.devmentor/workspace` | 工作区目录 |
 | `DEVMENTOR_STATE_DIR` | `.devmentor/state` | 会话状态目录 |
 | `DEVMENTOR_MAX_ITERS` | `24` | 单轮推理最大轮数 |
 | `DEVMENTOR_JAVA_HOME` | 自动探测 | 指定 JDK 17+ |
@@ -280,17 +222,17 @@ export DEVMENTOR_PERMISSION_MODE=read-only
 export DEVMENTOR_WORKSPACE=~/devmentor-data/workspace
 ```
 
-> 应用内也能改一部分：`/mode` 切权限、`/model` 换模型、`/login` 换凭据，这些立刻生效且会写进会话状态。
+> 应用内也能改一部分：`/mode` 切权限、`/model` 换模型、`/login` 换凭据，这些立刻生效。
 
 ---
 
 ## 开发
 
 ```bash
-# 后端快测（不依赖网络和 API Key，355 个，约 17 秒）
+# 后端快测（不依赖网络和 API Key）
 cd backend && python -m pytest tests/ -q -m "not e2e"
 
-# 后端全量测试（含 e2e，364 个，约 30 秒）
+# 后端全量测试（含 e2e，起真实子进程）
 cd backend && python -m pytest tests/ -q
 
 # 前端类型检查与构建
@@ -299,7 +241,7 @@ cd frontend && npx tsc --noEmit && npm run build
 # 只跑后端（调试协议）
 cd backend && python -m devmentor.server
 # 然后手工喂 JSON：
-#   {"type":"command","name":"help","args":[]}
+#   {"type":"command","name":"session","args":[]}
 #   {"type":"shutdown"}
 ```
 
@@ -307,11 +249,9 @@ cd backend && python -m devmentor.server
 
 会话状态存在 `.devmentor/state/<会话id>.json`，**默认保留最近 100 个**，更旧的自动删除。
 
-为什么有上限：一个典型会话（20 轮对话）约 32KB。重度使用（每天 10 个会话）一年会累积约 110MB，且此前没有任何清理机制。限制后占用稳定在约 3MB。
+为什么有上限：一个典型会话（20 轮对话）约 32KB。重度使用（每天 10 个会话）一年会累积约 110MB，
+且此前没有任何清理机制。限制后占用稳定在约 3MB。
 
-几个细节：
-
-- 清理只删会话状态，**不碰** `workspace/` 里的课程、技能、学习进度
 - 接续逻辑取最近的会话，清理不会把它删掉
 - `/new` 开的旧会话会保留，方便回看
 - 需要完整历史可以在代码里传 `SessionStore(dir, max_sessions=0)` 关闭限制
@@ -324,15 +264,10 @@ Get-ChildItem .devmentor/state | Measure-Object Length -Sum   # Windows
 
 ### 跨 Python 版本
 
-声明支持 3.11+，但实际在 `datetime`、`asyncio` 等细节上版本间有差异。**改代码后建议至少用两个版本各跑一次**：
+声明支持 3.11+，但实际在 `datetime`、`asyncio` 等细节上版本间有差异。**改代码后建议至少用两个版本各跑一次**。
 
-```bash
-# 例：3.13 与 3.12
-python -m pytest tests/ -q -m "not e2e"
-python3.12 -m pytest tests/ -q -m "not e2e"
-```
-
-真实踩过的坑：Python 3.12 在同一进程内连续调用 `datetime.now()` 时微秒不前进，导致连开两个会话拿到相同 id（3.13 上不复现），后一个会话会覆盖前一个。现在 id 里带了进程内自增序号。
+真实踩过的坑：Python 3.12 在同一进程内连续调用 `datetime.now()` 时微秒不前进，导致连开两个会话
+拿到相同 id（3.13 上不复现），后一个会话会覆盖前一个。现在 id 里带了进程内自增序号。
 
 ### 调试协议
 
@@ -346,6 +281,5 @@ python3.12 -m pytest tests/ -q -m "not e2e"
 - **前后端分开而不是单体**：渲染和推理的变更节奏完全不同。Ink 里改一个组件不该触发 Agent 重建；换模型不该动 UI 代码。
 - **协议用 JSON-lines 而不是 HTTP**：单机 CLI 引入 HTTP 只增加启动开销和端口管理。stdio 天然随进程生命周期，无端口冲突。
 - **前端保留一份命令表**：补全菜单要立即响应，不能等后端往返。命令执行仍由后端负责，前端表只影响补全体验——不同步也不会坏。
-- **架构分析用 tree-sitter 而不是完整编译**：与之前 Java 版同一个取舍——评审任意用户项目时，不能要求它依赖齐全、构建可跑。tree-sitter 只需要 `.java` 文件本身。
-- **事实与判断分离**：`ProjectSnapshot` 只有结构事实，`rules.py` 只有确定性判断，模型只拿到带证据的清单。这是防止 AI Code Review 说空话的根本手段。
+- **结论必须可验证**：导师唯一的能力锚点是"真跑一遍"。宁可说"这段我没执行过"，也不把猜的当成验证过的。
 - **凭据环境变量优先**：CI 里注入的 Key 盖掉开发机个人 Key，避免流水线误用个人额度。

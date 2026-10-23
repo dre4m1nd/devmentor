@@ -10,8 +10,8 @@ from devmentor.agent import _permission_for, build_toolkit
 from devmentor.config import Settings
 from devmentor.workspace import Workspace
 
-WRITE_TOOLS = {"progress_record", "java_run_snippet"}
-READ_TOOLS = {"arch_scan", "curriculum_list"}
+WRITE_TOOLS = {"java_run_snippet"}
+READ_TOOLS = {"java_compile_check"}
 
 
 def _decisions(mode):

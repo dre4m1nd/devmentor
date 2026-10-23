@@ -70,18 +70,20 @@ def test_all_third_party_imports_are_declared():
     assert not missing, "pyproject 缺少依赖声明: " + ", ".join(missing)
 
 
-def test_tree_sitter_java_is_declared():
-    """单独锁住这个：agentscope 不带它，漏了会导致 /arch 崩溃。"""
-    declared = " ".join(_declared_deps()).lower()
-    assert "tree-sitter-java" in declared, (
-        "必须显式声明 tree-sitter-java：agentscope 只提供 tree_sitter，"
-        "不提供 tree_sitter_java"
-    )
+def test_tree_sitter_java_is_not_declared():
+    """架构分析已删除，不该再声明 tree-sitter-java。
 
+    这个包以前是必须的：agentscope 只带 tree_sitter 不带 tree_sitter_java，
+    漏装会在 import devmentor.arch.scanner 时炸。但 arch 模块已删，
+    继续声明只会拖慢安装、让人误以为项目还在做 Java 架构分析。
+    """
+    cfg = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
+    deps = " ".join(cfg["project"]["dependencies"]).lower()
 
+    assert "tree-sitter-java" not in deps, "arch 已删，tree-sitter-java 也该删"
 def test_declared_packages_are_importable():
     """声明了就得能装上并用——防止写错包名。"""
-    for mod in ("agentscope", "pydantic", "tree_sitter", "tree_sitter_java"):
+    for mod in ("agentscope",):
         __import__(mod)
 
 
@@ -112,6 +114,20 @@ def test_no_unused_runtime_dependencies():
             unused.append(pkg)
 
     assert not unused, f"这些依赖声明了但代码没 import: {unused}"
+
+
+def test_no_tree_sitter_dependency():
+    """架构分析已删除，tree-sitter 系列依赖也应移除。
+
+    那两个包是 C 扩展，装机体积大；留着只会拖慢安装且让人以为
+    项目还在做 Java 架构分析。
+    """
+    cfg = tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
+    deps = " ".join(cfg["project"]["dependencies"]).lower()
+
+    assert "tree-sitter" not in deps and "tree_sitter" not in deps, (
+        "架构分析已删，不该再依赖 tree-sitter"
+    )
 
 
 def test_python_requirement_excludes_old_versions():

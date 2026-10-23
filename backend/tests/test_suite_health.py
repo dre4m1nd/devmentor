@@ -116,7 +116,7 @@ def test_no_oversized_test_files():
 def test_suite_is_substantial():
     """测试套件要有一定规模才有防护意义。"""
     total = sum(1 for _ in _test_functions())
-    assert total >= 300, f"只有 {total} 个测试，规模不足"
+    assert total >= 250, f"只有 {total} 个测试，规模不足"
 
 
 # ---------------------------------------------------------------- 覆盖

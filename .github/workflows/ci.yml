@@ -78,4 +78,5 @@ jobs:
             backend/tests/test_repo_layout.py \
             backend/tests/test_readme_accuracy.py \
             backend/tests/test_install_path.py \
-            backend/tests/test_suite_health.py -q
+            backend/tests/test_suite_health.py \
+            backend/tests/test_code_hygiene.py -q

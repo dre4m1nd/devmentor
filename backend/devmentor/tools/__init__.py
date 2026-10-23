@@ -1,14 +1,11 @@
-"""Agent 工具：教学验证、课程、进度、架构评审四类。"""
+"""Agent 工具：代码验证。
 
-from .architecture import ArchitectureTools
-from .curriculum import CurriculumTools
+只有一类工具——把用户贴的代码真编译真运行，让导师的每句话都可验证。
+"""
+
 from .java_snippet import compile_check, run_snippet
-from .progress import ProgressTools
 
 __all__ = [
-    "ArchitectureTools",
-    "CurriculumTools",
-    "ProgressTools",
     "compile_check",
     "run_snippet",
 ]

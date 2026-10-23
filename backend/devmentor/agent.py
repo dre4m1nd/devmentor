@@ -21,11 +21,10 @@ from agentscope.model import (
     OllamaChatModel,
     OpenAIChatModel,
 )
-from agentscope.skill._local_loader import LocalSkillLoader
 from agentscope.tool import FunctionTool, Toolkit
 
 from .config import CredentialStore, Settings, effective_provider
-from .tools import ArchitectureTools, CurriculumTools, ProgressTools, compile_check, run_snippet
+from .tools import compile_check, run_snippet
 from .workspace import Workspace
 
 
@@ -34,7 +33,7 @@ FALLBACK_SYSTEM_PROMPT = """你是 DevMentor，一位耐心、严格的编程导
 - 先诊断再给答案：问清目标、已尝试的方案和报错，再决定怎么讲。
 - 结论必须可验证：凡是声称"能运行"的代码，先用 java_run_snippet 真正跑一遍。
 - 一次只讲一个概念，给最小可运行示例。
-- 练习要附验收标准；学习者卡住时先给提示，不要直接贴答案。
+- 学习者卡住时先给提示，不要直接贴答案。
 - 默认用中文讲解，代码与术语保留英文。
 """
 
@@ -131,38 +130,9 @@ def _permission_for(mode: str, write_tool: bool):
 def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
     """注册全部工具。
 
-    工具本身无状态（除课程/进度需要 workspace 路径），可被并发共享。
+    工具本身无状态，可被并发共享。
     """
-    ws = workspace.path
-    curriculum = CurriculumTools(ws)
-    progress = ProgressTools(ws)
-    arch = ArchitectureTools(settings.project_dir, ws / "reports")
-
     tools = [
-        FunctionTool(
-            _wrap(curriculum.list_courses),
-            name="curriculum_list",
-            description="列出工作区里可用的课程。",
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(curriculum.read_course),
-            name="curriculum_read",
-            description="读取指定课程的完整内容。slug 是课程名，如 01-syntax-and-types。",
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(lambda: progress.read_progress()),
-            name="progress_read",
-            description="读取学习进度记录。",
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(progress.record_progress),
-            name="progress_record",
-            description="记录一条学习进度，用于跨会话记忆。note 是进度内容。",
-            permission=_permission_for(settings.permission_mode, write_tool=True),
-        ),
         FunctionTool(
             _wrap(
                 lambda source: run_snippet(
@@ -188,51 +158,8 @@ def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
             description="用 JDK 编译器检查 Java 片段，返回 行:列 诊断。不运行代码。",
             is_read_only=True,
         ),
-        FunctionTool(
-            _wrap(arch.scan),
-            name="arch_scan",
-            description=(
-                "全项目静态分析：包结构、包级依赖图、体量分布、规则命中清单。"
-                "在给出任何架构意见之前必须先调用它。"
-            ),
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(arch.findings),
-            name="arch_findings",
-            description="只看规则命中的缺陷，可按 severity（high/medium/low）过滤。",
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(arch.dependencies),
-            name="arch_dependencies",
-            description="只看包级依赖图与循环依赖。",
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(arch.file_profile),
-            name="arch_file_profile",
-            description="单文件画像：体量、方法数、命中的规则。",
-            is_read_only=True,
-        ),
-        FunctionTool(
-            _wrap(arch.read_source),
-            name="arch_read_source",
-            description="带行号读取源码，用于引用具体代码。",
-            is_read_only=True,
-        ),
     ]
-    # 把落盘的技能接进 Toolkit。
-    #
-    # 工作区结构是 skills/<name>/SKILL.md（每个技能一个子目录），
-    # 而 LocalSkillLoader 需要 scan_subdir=True 才会识别这种嵌套，
-    # 否则 list_skills() 返回空（传单个文件路径同样无效）。
-    skills_dir = ws / "skills"
-    loaders = []
-    if skills_dir.is_dir() and any(skills_dir.glob("*/SKILL.md")):
-        loaders.append(LocalSkillLoader(str(skills_dir), scan_subdir=True))
-
-    return Toolkit(tools=tools, skills_or_loaders=loaders or None)
+    return Toolkit(tools=tools)
 
 
 def _wrap(fn):

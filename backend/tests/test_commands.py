@@ -27,10 +27,13 @@ def test_removed_commands_are_gone():
 
 def test_core_commands_exist():
     names = set(command_names())
-    for expected in ("/new", "/reset", "/login", "/logout", "/arch", "/lesson",
-                     "/progress", "/mode", "/model", "/session", "/workspace",
-                     "/tools", "/quit"):
+    for expected in ("/new", "/reset", "/login", "/logout", "/mode", "/model",
+                     "/session", "/workspace", "/tools", "/quit"):
         assert expected in names, f"{expected} 应保留"
+
+    # 裁剪掉的命令：课程教学与架构评审
+    for gone in ("/arch", "/lesson", "/progress"):
+        assert gone not in names, f"{gone} 应已删除"
 
 
 def test_quit_and_exit_both_present():
@@ -41,7 +44,6 @@ def test_quit_and_exit_both_present():
 
 def test_argument_candidates_only_for_mode():
     assert argument_candidates("mode") == ["interactive", "read-only", "full"]
-    assert argument_candidates("arch") == []
     # 已删除的命令不该再返回候选
     assert argument_candidates("plan") == []
     assert argument_candidates("lang") == []
@@ -54,7 +56,6 @@ def test_parse_simple():
 
 def test_parse_with_args():
     assert parse("/mode read-only") == ("mode", ["read-only"])
-    assert parse("/arch D:\\proj") == ("arch", ["D:\\proj"])
 
 
 def test_parse_rejects_non_command():

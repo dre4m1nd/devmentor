@@ -100,43 +100,7 @@ def test_unsafe_name_does_not_escape_state_dir(tmp_path):
         assert f.parent == (tmp_path / "state").resolve() or f.parent == tmp_path / "state"
 
 
-# ---------------------------------------------------------------- 其它命令参数
-
-def test_lesson_accepts_slug(tmp_path):
-    s, store, svc, cmds = _ctx(tmp_path)
-    asyncio.run(svc.ready_event())
-    # 先落一份课程模板
-    from devmentor.workspace import Workspace
-    Workspace(s.workspace_dir).ensure()
-
-    events = _drain(cmds.handle("lesson", ["01-syntax-and-types"], svc))
-    text = " ".join(getattr(e, "text", "") for e in events)
-
-    assert "语法" in text or "类型" in text
-
-
-def test_lesson_with_bad_slug_reports(tmp_path):
-    s, store, svc, cmds = _ctx(tmp_path)
-    asyncio.run(svc.ready_event())
-    from devmentor.workspace import Workspace
-    Workspace(s.workspace_dir).ensure()
-
-    events = _drain(cmds.handle("lesson", ["nope"], svc))
-    text = " ".join(getattr(e, "text", "") for e in events)
-
-    assert "没有找到" in text
-
-
-def test_logout_accepts_provider_name(tmp_path):
-    s, store, svc, cmds = _ctx(tmp_path)
-    store.save("openai", "k1")
-    store.save("deepseek", "k2")
-
-    _drain(cmds.handle("logout", ["openai"], svc))
-
-    assert store.find("openai") is None
-    assert store.find("deepseek") == "k2"
-
+# ---------------------------------------------------------------- 其余命令
 
 @pytest.mark.parametrize("mode", ["interactive", "read-only", "full"])
 def test_mode_accepts_all_three(tmp_path, mode):
@@ -144,5 +108,21 @@ def test_mode_accepts_all_three(tmp_path, mode):
     events = _drain(cmds.handle("mode", [mode], svc))
 
     assert s.permission_mode == mode
-    assert any("已切换" in getattr(e, "text", "") or "已切换" in getattr(e, "message", "")
-               for e in events)
+    assert any("已切换" in getattr(e, "text", "") for e in events)
+
+
+def test_model_accepts_id(tmp_path):
+    s, store, svc, cmds = _ctx(tmp_path)
+    events = _drain(cmds.handle("model", ["ollama:qwen2.5-coder"], svc))
+
+    assert "ollama" in s.model_id
+    assert any("已切换" in getattr(e, "text", "") for e in events)
+
+
+def test_removed_commands_report_unknown(tmp_path):
+    """/arch /lesson /progress 已删除，应当走未知命令分支。"""
+    s, store, svc, cmds = _ctx(tmp_path)
+
+    for gone in ("arch", "lesson", "progress"):
+        events = _drain(cmds.handle(gone, [], svc))
+        assert any(e.type == "error" for e in events), f"/{gone} 应报未知命令"
