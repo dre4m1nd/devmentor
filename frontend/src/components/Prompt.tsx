@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { appendFileSync } from 'node:fs';
 
 import { symbols, theme } from '../theme.js';
 import { COMMANDS, type CommandDef } from '../commands.js';
@@ -25,14 +24,6 @@ export function Prompt({
     : [];
 
   useInput((inputChar, key) => {
-    if (process.env.DEVMENTOR_DEBUG_KEYS) {
-      try {
-        appendFileSync('keys.log', JSON.stringify({
-          ch: inputChar, return: key.return, up: key.upArrow, down: key.downArrow, esc: key.escape,
-        }) + '\n');
-      } catch {}
-    }
-
     if (key.return) {
       const text = value.trim();
       if (!text) return;
