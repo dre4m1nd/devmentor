@@ -1,2 +1,9 @@
-/mvnw text eol=lf
+# 统一换行符，避免 Windows/macOS 混用时整个文件被改掉。
+# 后端 Python 与前端 TS 一律 LF；cmd 脚本保留 CRLF（Windows 命令行要求）。
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.mjs text eol=lf
+*.md text eol=lf
 *.cmd text eol=crlf
+*.sh text eol=lf
