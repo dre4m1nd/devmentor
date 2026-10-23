@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { appendFileSync } from 'node:fs';
 
 import { symbols, theme } from '../theme.js';
 import { COMMANDS, type CommandDef } from '../commands.js';
@@ -26,6 +27,13 @@ export function Prompt({
     : [];
 
   useInput((inputChar, key) => {
+    if (process.env.DEVMENTOR_DEBUG_KEYS) {
+      try {
+        appendFileSync('keys.log', JSON.stringify({
+          ch: inputChar, return: key.return, up: key.upArrow, down: key.downArrow, esc: key.escape,
+        }) + '\n');
+      } catch {}
+    }
     if (disabled) return;
 
     if (key.return) {
@@ -69,7 +77,22 @@ export function Prompt({
     }
 
     if (key.ctrl || key.meta) return;
+
     if (inputChar) {
+      // 输入里可能夹带换行：粘贴多行文本，或某些终端/测试环境下
+      // 整行一次性送达（此时 key.return 为 false，\n 混在字符里）。
+      // 遇到换行就当作提交，否则文字会全部堆进输入框却无法发送。
+      const newlineIdx = inputChar.search(/[\r\n]/);
+      if (newlineIdx >= 0) {
+        const head = inputChar.slice(0, newlineIdx);
+        const combined = (value + head).trim();
+        if (combined) {
+          onSubmit(combined);
+        }
+        setValue('');
+        setSelected(0);
+        return;
+      }
       setValue((v) => v + inputChar);
       setSelected(0);
     }
