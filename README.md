@@ -186,7 +186,10 @@ devmentor/
 ## 开发
 
 ```bash
-# 后端测试（不依赖网络和 API Key）
+# 后端测试（不依赖网络和 API Key，约 3 秒）
+cd backend && python -m pytest tests/ -q -m "not e2e"
+
+# 含端到端协议测试（起子进程，约 30 秒）
 cd backend && python -m pytest tests/ -q
 
 # 前端类型检查与构建
@@ -198,6 +201,18 @@ cd backend && python -m devmentor.server
 #   {"type":"command","name":"help","args":[]}
 #   {"type":"shutdown"}
 ```
+
+### 跨 Python 版本
+
+声明支持 3.11+，但实际在 `datetime`、`asyncio` 等细节上版本间有差异。**改代码后建议至少用两个版本各跑一次**：
+
+```bash
+# 例：3.13 与 3.12
+python -m pytest tests/ -q -m "not e2e"
+python3.12 -m pytest tests/ -q -m "not e2e"
+```
+
+真实踩过的坑：Python 3.12 在同一进程内连续调用 `datetime.now()` 时微秒不前进，导致连开两个会话拿到相同 id（3.13 上不复现），后一个会话会覆盖前一个。现在 id 里带了进程内自增序号。
 
 ### 调试协议
 

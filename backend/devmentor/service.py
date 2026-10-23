@@ -280,14 +280,25 @@ class AgentService:
 # ---------------------------------------------------------------- 辅助
 
 
+#: 进程内会话序号。用于兜住"同一微秒内连开两个会话"的情况。
+_session_counter = 0
+
+
 def _new_session_id(user_id: str) -> str:
     """生成会话 id。
 
-    带微秒后缀：同一秒内连开两个会话（如自动化脚本）不会撞名。
+    格式：mentor-YYYYMMDD-HHMMSS-微秒-序号
+
+    为什么要带序号：某些 Python 版本（实测 3.12）在同一进程里连续调用
+    datetime.now() 时微秒不前进，连开两个会话会拿到完全相同的 id，
+    进而让后一个会话的状态覆盖前一个。加进程内自增序号可彻底避免。
     """
+    global _session_counter
     from datetime import datetime
 
-    return f"mentor-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
+    _session_counter += 1
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    return f"mentor-{stamp}-{_session_counter}"
 
 
 def _mask(key: str) -> str:
