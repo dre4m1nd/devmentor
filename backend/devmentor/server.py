@@ -57,10 +57,14 @@ class Server:
             if request.type == "shutdown":
                 break
             if request.type == "ask":
-                async for ev in self._handle_input(request.text):
+                async for ev in self._dispatch_text(request.text):
                     self.emit(ev)
             elif request.type == "command":
-                async for ev in self._handle_command(request.name, request.args):
+                # 命令也要过登录状态机：前端把 /login 的序号当命令发过来时，
+                # 必须先被登录流程接住，而不是当成未知命令。
+                async for ev in self._dispatch_text(
+                    "/" + request.name + (" " + " ".join(request.args) if request.args else "")
+                ):
                     self.emit(ev)
             elif request.type == "confirm":
                 async for ev in self._service.confirm(request.approved, request.reason):
@@ -70,14 +74,17 @@ class Server:
 
     # ------------------------------------------------------------ 输入分发
 
-    async def _handle_input(self, text: str) -> AsyncIterator[Event]:
+    async def _dispatch_text(self, text: str) -> AsyncIterator[Event]:
         text = text.strip()
         if not text:
             return
 
-        # 登录流程是两段式交互，优先处理
+        # 登录流程是两段式交互，优先处理。
+        # 前端把这一阶段的输入也当命令发来（"1" 变成 "/1"），
+        # 所以先剥掉开头的 "/"，再交给登录状态机。
         if self._login_stage:
-            async for ev in self._handle_login_reply(text):
+            reply = text[1:] if text.startswith("/") else text
+            async for ev in self._handle_login_reply(reply):
                 yield ev
             return
 

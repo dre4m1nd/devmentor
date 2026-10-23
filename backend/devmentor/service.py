@@ -94,12 +94,16 @@ class AgentService:
     # ------------------------------------------------------------ 对话
 
     async def ask(self, text: str) -> AsyncIterator[Event]:
-        """跑一轮对话，把事件翻译成协议事件。"""
-        agent = self._ensure_agent()
-        if agent is None:
-            return
+        """跑一轮对话，把事件翻译成协议事件。
 
+        turn.end 放在最外层 finally：只要这一轮有 ask，无论成功、失败
+        还是构造 Agent 时就抛异常，前端都必须收到结束信号，
+        否则会永远停在"思考中"且输入框不恢复。
+        """
         try:
+            agent = self._ensure_agent()
+            if agent is None:
+                return
             async for event in agent.reply_stream(UserMsg(name="user", content=text)):
                 async for out in self._translate(event):
                     yield out
@@ -111,25 +115,27 @@ class AgentService:
             yield proto.turn_end()
 
     async def confirm(self, approved: bool, reason: str = "") -> AsyncIterator[Event]:
-        """回送用户对工具调用的确认结果，继续执行。"""
+        """回送用户对工具调用的确认结果，继续执行。
+
+        与 ask() 同理：turn.end 由最外层 finally 保证，
+        构造 Agent 失败也不能让前端卡住。
+        """
         from agentscope.event import UserConfirmResultEvent
 
-        agent = self._ensure_agent()
-        if agent is None or not self._pending_confirm:
-            yield proto.turn_end()
+        try:
+            agent = self._ensure_agent()
+            if agent is None or not self._pending_confirm:
+                return
+        except Exception as e:
+            yield proto.error(_friendly(e))
             return
 
         from agentscope.event._event import ConfirmResult
 
-        results = []
-        for call in self._pending_confirm:
-            results.append(
-                ConfirmResult(
-                    confirmed=approved,
-                    tool_call=call,
-                    rules=None,
-                )
-            )
+        results = [
+            ConfirmResult(confirmed=approved, tool_call=call, rules=None)
+            for call in self._pending_confirm
+        ]
         self._pending_confirm = []
 
         try:
@@ -175,9 +181,10 @@ class AgentService:
 
         if name == _REQUIRE_CONFIRM:
             calls = getattr(event, "tool_calls", None) or getattr(event, "calls", None) or []
-            normalized = [_as_dict(c) for c in calls]
-            self._pending_confirm = normalized
-            yield proto.require_confirm(normalized)
+            # 保留原始 ToolCallBlock：回送确认结果时 ConfirmResult 要求它是
+            # ToolCallBlock 而非 dict，转成 dict 会在构造时直接 ValidationError。
+            self._pending_confirm = list(calls)
+            yield proto.require_confirm([_as_dict(c) for c in calls])
             return
 
         if name == _EXCEED_MAX_ITERS:

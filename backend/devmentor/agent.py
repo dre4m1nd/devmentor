@@ -224,7 +224,14 @@ def build_toolkit(settings: Settings, workspace: Workspace) -> Toolkit:
             is_read_only=True,
         ),
     ]
-    return Toolkit(tools=tools)
+    # 把落盘的技能接进 Toolkit：工作区 skills/<name>/SKILL.md 会被解析成
+    # 可用技能，模型通过 skill viewer 读取。没有 skills 目录时传空列表。
+    skills_dir = ws / "skills"
+    skill_paths: list[str] = []
+    if skills_dir.is_dir():
+        skill_paths = [str(p) for p in sorted(skills_dir.glob("*/SKILL.md"))]
+
+    return Toolkit(tools=tools, skills_or_loaders=skill_paths or None)
 
 
 def _wrap(fn):

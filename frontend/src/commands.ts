@@ -30,6 +30,7 @@ export const COMMANDS: CommandDef[] = [
   { name: '/workspace', desc: '显示工作区与代码目录' },
   { name: '/session', desc: '显示当前会话信息' },
   { name: '/quit', desc: '退出' },
+  { name: '/exit', desc: '退出（/quit 的别名）' },
 ];
 
 /** 把一行输入解析成命令名与参数。 */

@@ -95,12 +95,12 @@ export function Prompt({
                   {i === selected ? '❯' : ' '}
                 </Text>
               </Box>
-              <Box width={12}>
+              <Box width={38}>
                 <Text bold={i === selected} color={i === selected ? theme.accent : undefined}>
-                  {c.name}
+                  {c.usage ?? c.name}
                 </Text>
               </Box>
-              <Text color={theme.muted}>{c.usage ?? c.desc}</Text>
+              <Text color={theme.muted}>{c.desc}</Text>
             </Box>
           ))}
         </Box>

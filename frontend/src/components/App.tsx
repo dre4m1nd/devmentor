@@ -23,6 +23,13 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
   const [busy, setBusy] = useState(false);
   const [pendingCalls, setPendingCalls] = useState<Record<string, unknown>[] | null>(null);
   const [exited, setExited] = useState(false);
+  // 需要用户点选的菜单（如 /login 的厂商列表）。收到 menu 事件时设置，
+  // 选中或取消后清空。渲染成可 ↑↓ 选择、回车确认的列表。
+  const [activeMenu, setActiveMenu] = useState<{
+    title: string;
+    options: { value: string; label: string; desc?: string }[];
+    selected: number;
+  } | null>(null);
 
   // 流式文本：模型输出是增量事件，累积起来当作一条 assistant 记录
   const streamBuf = useRef('');
@@ -118,12 +125,11 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
 
         case 'menu':
           flushStream();
-          push({ kind: 'system', text: event.title });
-          event.options.forEach((o) => {
-            push({
-              kind: 'system',
-              text: '  ' + o.value + ') ' + o.label + (o.desc ? '  ' + o.desc : ''),
-            });
+          // 不写进历史：这是一个待选择的交互，渲染成菜单更合适
+          setActiveMenu({
+            title: event.title,
+            options: event.options,
+            selected: 0,
           });
           break;
 
@@ -175,13 +181,56 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
       push({ kind: 'user', text });
       const parsed = parseCommand(text);
       if (parsed) {
+        // 斜杠命令是本地即时响应，不进 busy 状态。
+        // 后端只在 ask()/confirm() 结束时发 turn.end，命令不会发——
+        // 若这里也 setBusy(true)，会永远卡在"思考中"且输入框消失。
         backend.command(parsed.name, parsed.args);
       } else {
         backend.ask(text);
+        setBusy(true);
       }
-      setBusy(true);
     },
     [push],
+  );
+
+  // 菜单模式：↑↓ 选择，回车确认，Esc 取消
+  useInput(
+    (_inputChar, key) => {
+      const backend = backendRef.current;
+      if (!backend || !activeMenu) return;
+
+      if (key.upArrow) {
+        setActiveMenu({
+          ...activeMenu,
+          selected:
+            (activeMenu.selected - 1 + activeMenu.options.length) %
+            activeMenu.options.length,
+        });
+        return;
+      }
+      if (key.downArrow) {
+        setActiveMenu({
+          ...activeMenu,
+          selected: (activeMenu.selected + 1) % activeMenu.options.length,
+        });
+        return;
+      }
+      if (key.return) {
+        const chosen = activeMenu.options[activeMenu.selected];
+        setActiveMenu(null);
+        push({ kind: 'user', text: chosen.value });
+        // 登录阶段后端期望裸文本，用 ask 发才能在 _dispatch_text 里被接住
+        backend.ask(chosen.value);
+        return;
+      }
+      if (key.escape) {
+        setActiveMenu(null);
+        push({ kind: 'system', text: '已取消。' });
+        backend.ask('');
+        return;
+      }
+    },
+    { isActive: activeMenu !== null },
   );
 
   // 确认模式：y/n 决定是否放行
@@ -209,7 +258,33 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
 
       {pendingCalls ? <ConfirmBox calls={pendingCalls} /> : null}
 
-      {exited ? null : busy ? (
+      {activeMenu ? (
+        <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={theme.accent} paddingX={1}>
+          <Text bold color={theme.accent}>
+            {activeMenu.title}
+          </Text>
+          {activeMenu.options.map((o, i) => (
+            <Box key={o.value}>
+              <Box width={2}>
+                <Text color={i === activeMenu.selected ? theme.accent : theme.muted}>
+                  {i === activeMenu.selected ? '❯' : ' '}
+                </Text>
+              </Box>
+              <Box width={32}>
+                <Text bold={i === activeMenu.selected} color={i === activeMenu.selected ? theme.accent : undefined}>
+                  {o.label}
+                </Text>
+              </Box>
+              <Text color={theme.muted}>{o.desc ?? ''}</Text>
+            </Box>
+          ))}
+          <Box marginTop={1}>
+            <Text color={theme.muted}>↑↓ 选择，回车确认，Esc 取消</Text>
+          </Box>
+        </Box>
+      ) : null}
+
+      {exited ? null : activeMenu ? null : busy ? (
         <Box marginTop={1}>
           <Text color={theme.muted}>思考中… （Ctrl+C 中断）</Text>
         </Box>

@@ -1,0 +1,37 @@
+fix: 修复登录状态机、确认流程类型等 6 个自检缺陷
+
+自检发现的问题，其中 3 个让核心功能处于损坏状态：
+
+1. /login 完全不可用（最严重）
+   登录两段式的状态判断只写在 _dispatch_text 里，而前端提交斜杠命令
+   走的是 command 请求，直接进 _handle_command，绕过了状态检查。
+   选了厂商序号后被当成未知命令 /1，登录永远完不成。
+   修复：把 command 请求也路由到 _dispatch_text 统一入口，
+   并在登录阶段剥掉 "/" 前缀。新增 _dispatch_text 替代 _handle_input。
+   实测三步全通：菜单 -> 厂商 -> Key -> 保存成功。
+
+2. 确认流程一用就崩
+   _pending_confirm 存的是 _as_dict() 后的普通 dict，但
+   ConfirmResult.tool_call 要求真实 ToolCallBlock，构造时 ValidationError。
+   修复：保留原始 ToolCallBlock，只在发给前端时序列化。
+   约束：ToolCallBlock input 必须是 JSON 字符串不是 dict。
+
+3. /exit 是隐藏命令
+   后端有、前端菜单没有，只能靠记忆输入。
+   修复：前端命令表补上 /exit。
+
+4. 6 个命令的说明被丢弃
+   上一轮加 usage 字段时写的是 usage ?? desc，有 usage 就不显示 desc，
+   用户看得到语法却不知道命令干什么。
+   修复：菜单改为两列，左 usage 右 desc。
+
+5. 厂商菜单不可交互
+   前端把 menu 事件当纯文本 push 进历史，无法选择。
+   修复：新增 activeMenu 状态，渲染成可 ↑↓ 选择、回车确认、Esc 取消的
+   列表；选中后通过 ask 发送，确保被登录状态机接住。
+
+6. skills 模板落盘但无人读取
+   修复：把 workspace/skills/*/SKILL.md 接进 Toolkit 的 skills_or_loaders，
+   4 个技能现在真正可用。
+
+测试：后端 105 个（新增 7 个回归测试锁定上述缺陷），前端 tsc 零错误。
