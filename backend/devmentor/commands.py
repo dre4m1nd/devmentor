@@ -91,17 +91,21 @@ class CommandHandler:
             return
 
         if name == "reset":
-            if service._agent is not None:
-                # Agent 的上下文重置：重建 Agent 即清空内存上下文
-                service.reset_agent()
+            # 清空磁盘上的会话状态再重建 Agent，否则下次创建会把历史读回来
+            service._sessions.clear(self._settings.session_id)
+            service.reset_agent()
             yield proto.system("当前会话上下文已清空。")
             return
 
         if name == "new":
-            self._settings.session_id = ""
+            # 先存好当前会话，再强制开新的；旧会话留在磁盘上可回看
+            service.save_state()
             service.reset_agent()
-            ev = await service.ready_event()
-            yield proto.system(f"已开启新会话：{ev.session.get('session', '')}")
+            new_id = service.start_new_session()
+            await service.ready_event()
+            # 立刻落一份空状态，保证这个会话在磁盘上存在
+            service.save_state(create_if_missing=True)
+            yield proto.system(f"已开启新会话：{new_id}")
             return
 
         if name == "session":

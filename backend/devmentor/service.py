@@ -15,6 +15,7 @@ from . import protocol as proto
 from .agent import MissingCredential, build_agent
 from .config import CredentialStore, Settings, provider_by_id, provider_by_name
 from .protocol import Event, MenuOption, ToolState
+from .store import SessionStore, default_store
 from .workspace import Workspace
 
 # AgentScope 事件类型 -> 我们的处理方式（用 isinstance 更稳，但这里只需 type 名）
@@ -49,6 +50,7 @@ class AgentService:
         self._settings = settings
         self._store = store
         self._workspace = Workspace(settings.workspace_dir)
+        self._sessions = default_store(settings)
         self._agent = None
         self._pending_confirm: list[dict] = []
 
@@ -69,17 +71,40 @@ class AgentService:
 
     async def ready_event(self) -> Event:
         written = self._workspace.ensure()
+        session_id = self._settings.session_id or self._continue_or_new_session()
         session = {
             "user": self._settings.user_id,
-            "session": self._settings.session_id or _new_session_id(self._settings.user_id),
+            "session": session_id,
             "workspace": str(self._workspace.path),
             "project": str(self._settings.project_dir),
             "permission": self._settings.permission_mode,
             "credentials": self.credential_status(),
             "bootstrapped": written,
         }
-        self._settings.session_id = session["session"]
+        self._settings.session_id = session_id
+        # 会话一被分配就落一份空状态：这样即使一句话没说就退出，
+        # 下次启动也能接续到这个会话。
+        self.save_state(create_if_missing=True)
         return proto.ready(session, self._settings.model_id)
+
+    def start_new_session(self) -> str:
+        """强制开一个新会话，不接续历史。
+
+        /new 用它：直接生成新 id 并记为当前会话，
+        之后再调 ready_event 就不会走"恢复最近会话"的分支。
+        """
+        self._settings.session_id = _new_session_id(self._settings.user_id)
+        return self._settings.session_id
+
+    def _continue_or_new_session(self) -> str:
+        """默认接续最近一次会话，让重启后还能接着聊。
+
+        只有一条历史都没有时才开新会话。想强制开新的用 /new。
+        """
+        existing = self._sessions.sessions()
+        if existing:
+            return existing[0]
+        return _new_session_id(self._settings.user_id)
 
     def credential_status(self) -> str:
         """一行说明当前凭据来源，让用户一眼看出能不能用。"""
@@ -112,6 +137,8 @@ class AgentService:
         except Exception as e:
             yield proto.error(_friendly(e))
         finally:
+            # 每轮结束都落盘：进程被杀也只丢最后半轮
+            self.save_state()
             yield proto.turn_end()
 
     async def confirm(self, approved: bool, reason: str = "") -> AsyncIterator[Event]:
@@ -200,25 +227,55 @@ class AgentService:
     # ------------------------------------------------------------ Agent 构建
 
     def _ensure_agent(self):
-        """惰性创建 Agent；缺 Key 时返回 None（已产出的错误事件由调用方负责）。"""
+        """惰性创建 Agent；缺 Key 时返回 None（已产出的错误事件由调用方负责）。
+
+        创建时尝试从磁盘恢复该会话的历史状态，恢复失败就开新会话——
+        坏一个状态文件不该让整个应用起不来。
+        """
         if self._agent is not None:
             return self._agent
         try:
-            self._agent = build_agent(self._settings, self._workspace, self._store)
+            restored = self._sessions.load(self._settings.session_id)
+            self._agent = build_agent(
+                self._settings, self._workspace, self._store, state=restored
+            )
             return self._agent
         except MissingCredential:
             raise
-        except Exception as e:
+        except Exception:
             raise
+
+    def save_state(self, create_if_missing: bool = False) -> None:
+        """把当前会话状态落盘。任何失败都静默——存不下不该打断对话。
+
+        create_if_missing=True 时，即使还没创建 Agent（例如刚 /new 完
+        就退出），也写一份空状态，保证这个会话在磁盘上存在，
+        下次启动能被接续。
+        """
+        agent = self._agent
+        state = getattr(agent, "state", None) if agent is not None else None
+
+        if state is None:
+            if not create_if_missing:
+                return
+            from agentscope.state import AgentState
+
+            state = AgentState(session_id=self._settings.session_id)
+
+        self._sessions.save(self._settings.session_id, state)
 
 
 # ---------------------------------------------------------------- 辅助
 
 
 def _new_session_id(user_id: str) -> str:
+    """生成会话 id。
+
+    带微秒后缀：同一秒内连开两个会话（如自动化脚本）不会撞名。
+    """
     from datetime import datetime
 
-    return f"mentor-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    return f"mentor-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
 
 
 def _mask(key: str) -> str:

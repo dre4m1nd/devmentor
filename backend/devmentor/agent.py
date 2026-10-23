@@ -239,14 +239,27 @@ def _wrap(fn):
     return fn
 
 
-def build_agent(settings: Settings, workspace: Workspace, store: CredentialStore) -> Agent:
-    """组装 Agent。"""
+def build_agent(
+    settings: Settings,
+    workspace: Workspace,
+    store: CredentialStore,
+    state=None,
+) -> Agent:
+    """组装 Agent。
+
+    state 不为 None 时用它恢复历史对话；这样重启后上下文还在。
+    """
     workspace.ensure()
     system_prompt = workspace.read_agents_md() or FALLBACK_SYSTEM_PROMPT
+
+    kwargs = {}
+    if state is not None:
+        kwargs["state"] = state
 
     return Agent(
         name="devmentor",
         system_prompt=system_prompt,
         model=build_model(settings, store),
         toolkit=build_toolkit(settings, workspace),
+        **kwargs,
     )
