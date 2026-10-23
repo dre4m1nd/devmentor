@@ -148,9 +148,17 @@ def test_no_test_spawns_pytest_subprocess():
     用 AST 找 subprocess.run/Popen 调用，而不是搜字符串——否则这条
     测试会因为自己包含 "pytest" 字样而误报自己。
     """
+    # 这两个文件允许起 pytest 子进程：
+    #   test_suite_health.py —— 本文件，含检测逻辑自身
+    #   test_protocol_e2e.py —— e2e 的职责就是验证"干净环境里能重复跑"，
+    #                           这必须真的再起一次进程才算验证过
+    ALLOWED = {"test_suite_health.py", "test_protocol_e2e.py"}
+
     offenders = []
 
     for p in sorted(TESTS.glob("*.py")):
+        if p.name in ALLOWED:
+            continue
         tree = ast.parse(p.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             # subprocess.run([...]) / subprocess.Popen([...])
@@ -158,15 +166,14 @@ def test_no_test_spawns_pytest_subprocess():
                 continue
             if node.func.attr not in ("run", "Popen", "call", "check_output"):
                 continue
-            # 取参数里的字符串常量
-            for arg in node.args:
-                strs = [
-                    s.value
-                    for s in ast.walk(arg)
-                    if isinstance(s, ast.Constant) and isinstance(s.value, str)
-                ]
-                if "pytest" in strs or "-m pytest" in strs:
-                    offenders.append(f"{p.name}:{node.lineno}")
-                    break
+            # 收集整个调用里的所有字符串常量（含列表元素）
+            strs = [
+                s.value
+                for s in ast.walk(node)
+                if isinstance(s, ast.Constant) and isinstance(s.value, str)
+            ]
+            # 只惩罚"真的去跑 pytest"的；装依赖、跑 git 是合理的
+            if "pytest" in strs:
+                offenders.append(f"{p.name}:{node.lineno}")
 
     assert not offenders, f"这些测试会启动 pytest 子进程: {offenders}"
