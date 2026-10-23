@@ -10,6 +10,19 @@ $ devmentor
 
 ---
 
+## 目录说明
+
+| 目录 | 说明 |
+| --- | --- |
+| `backend/` | Python agent 服务（当前版本的核心） |
+| `frontend/` | Node + Ink 终端 UI |
+| `legacy/` | **重构前的 Java 版，已废弃**，仅供查阅，见 [legacy/README.md](legacy/README.md) |
+
+> Java 版的功能已全部在 `backend/` 中重实现。运行时完全不需要 JDK 以外的 Java 工具链，
+> 也不需要 `pom.xml` 或 Maven。
+
+---
+
 ## 架构
 
 前后端分离，通过 **JSON-lines over stdio** 通信：
