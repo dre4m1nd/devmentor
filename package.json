@@ -2,10 +2,11 @@
   "name": "devmentor",
   "version": "2.0.0",
   "private": true,
-  "description": "DevMentor - Java programming mentor. Python agent backend + Ink terminal frontend.",
+  "description": "DevMentor - terminal programming mentor. Python agent backend + Ink frontend.",
   "scripts": {
     "build": "npm --prefix frontend run build",
     "test": "cd backend && python -m pytest tests/ -q",
-    "dev": "node frontend/dist/cli.js"
+    "test:fast": "cd backend && python -m pytest tests/ -q -m 'not e2e'",
+    "start": "node frontend/dist/cli.js"
   }
 }

@@ -1,7 +1,7 @@
 [project]
 name = "devmentor-backend"
 version = "2.0.0"
-description = "DevMentor agent service - Java programming mentor with architecture review"
+description = "DevMentor agent service - terminal programming mentor with architecture review"
 requires-python = ">=3.11"
 dependencies = [
     "agentscope>=2.0.10",

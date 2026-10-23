@@ -1,0 +1,33 @@
+fix: 元数据里残留的 Java 专属定位，并加一致性测试
+
+Round 4 把定位从"Java 编程导师"改成"编程导师"时，改了 banner、
+README、AGENTS.md，但漏了三处元数据：
+  package.json          Java programming mentor
+  backend/pyproject.toml Java programming mentor
+  backend/devmentor/__init__.py  Java programming mentor
+
+后果：pip show / npm view 看到的项目描述与实际能力不符，
+用户以为这是 Java 专用工具。
+
+顺带修正 package.json 的脚本命名：
+  "dev": "node frontend/dist/cli.js"  ->  "start"
+  （这个命令跑的是构建产物，不是开发模式，叫 dev 有误导）
+  补 "test:fast"（跳过 e2e，3 秒跑完，日常开发用）
+
+新增 6 个测试防止同类不一致：
+- pyproject / package.json 描述不能含 Java 专属表述
+- 前后端包名都应是 devmentor 系
+- 根脚本需覆盖 build / test / test:fast / start
+- 前端有 build 脚本
+- 包声明版本
+
+测试：3.13 全量 224 通过；3.12 快测 215 通过。
+
+## 本轮还做了全功能回归
+
+连续 7 轮改动后，从零验证核心能力没有退化，16 项全通过：
+  启动 ready / 工作区 14 个模板 / 13 个命令全识别 /
+  架构扫描 / 8 篇课程 / 11 个工具注册 / java_run 真跑 /
+  编译诊断带行列 / 进度读写 / arch_scan 事实输出 /
+  非 Java 文件提示 / 带行号读源码 / 技能 4 个 /
+  会话持久化 / 保留上限 / 连接错误提示
