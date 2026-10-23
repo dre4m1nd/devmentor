@@ -225,22 +225,87 @@ def _java_major(java_exe: Path) -> int | None:
     return None
 
 
+#: 教学基线版本。多个 JDK 可用时优先挑这个：用户的课程示例
+#: 与验收标准都按 17 写，用 26 会有语法/API 差异，容易和教材对不上。
+PREFERRED_MAJOR = 17
+
+#: 各平台 JDK 常见安装位置（Windows 之外的机器通常没有 ~/.jdks）。
+_COMMON_JDK_ROOTS = (
+    "/usr/lib/jvm",          # Debian / Ubuntu / RHEL
+    "/Library/Java/JavaVirtualMachines",  # macOS 系统级
+    "/opt/homebrew/opt",     # macOS Apple Silicon Homebrew
+    "/usr/local/opt",        # macOS Intel Homebrew
+    "/opt/java",
+)
+
+
+def _version_from_name(name: str) -> int | None:
+    """从目录名粗猜主版本，避免对每个候选都起子进程。"""
+    import re
+
+    m = re.search(r"(\d+)", name)
+    if not m:
+        return None
+    v = int(m.group(1))
+    return v if v >= 8 else None
+
+
+def _discover_jdk_dirs() -> list[Path]:
+    """收集所有可能的 JDK 目录（未验证版本）。"""
+    found: list[Path] = []
+
+    # IntelliJ 下载的 JDK
+    jdks = Path.home() / ".jdks"
+    if jdks.is_dir():
+        found += [d for d in jdks.iterdir() if d.is_dir()]
+
+    # 各平台标准位置。macOS 的 JavaVirtualMachines 下面还有一层
+    # *.jdk/Contents/Home，需要再补一个候选。
+    #
+    # 不按 os.name 过滤：这些根目录在 Windows 上本来就不存在，
+    # 判断 is_dir() 已足够；加平台判断反而让这段无法在 Windows 上被测试。
+    for root in _COMMON_JDK_ROOTS:
+        base = Path(root)
+        if not base.is_dir():
+            continue
+        for d in base.iterdir():
+            if not d.is_dir():
+                continue
+            found.append(d)
+            contents_home = d / "Contents" / "Home"
+            if contents_home.is_dir():
+                found.append(contents_home)
+
+    return found
+
+
 def _jdk_candidates() -> list[Path]:
-    """按优先级返回候选 JDK 目录：显式指定 -> ~/.jdks 扫描 -> JAVA_HOME -> PATH。"""
+    """按优先级返回候选 JDK 目录。
+
+    优先级：显式指定 -> 与教学基线同版本的 JDK -> 其它 17+ 的 JDK -> JAVA_HOME。
+
+    刻意让 17 排在更高版本前面：课程与练习都按 17 写，
+    用 26 编译会碰到语法/API 差异，反而让学习者困惑。
+    """
     out: list[Path] = []
 
     if explicit := os.environ.get("DEVMENTOR_JAVA_HOME"):
         out.append(Path(explicit))
 
-    jdks = Path.home() / ".jdks"
-    if jdks.is_dir():
-        # 只认名字里带 17 或更大的，避免对每个子目录都起子进程探测
-        import re
+    def _sort_key(p: Path):
+        v = _version_from_name(p.name)
+        # 离基线越近越靠前；比基线低的不参与（下面会过滤）
+        distance = abs(v - PREFERRED_MAJOR) if v else 99
+        return (distance, -distance, p.name)
 
-        pattern = re.compile(r"^(?:open)?jdk-(17|18|19|2\d|1[89])")
-        for child in sorted(jdks.iterdir(), reverse=True):
-            if child.is_dir() and pattern.match(child.name):
-                out.append(child)
+    eligible = []
+    for d in _discover_jdk_dirs():
+        v = _version_from_name(d.name)
+        if v is None or v < 17:
+            continue
+        eligible.append(d)
+
+    out += sorted(eligible, key=_sort_key)
 
     if java_home := os.environ.get("JAVA_HOME"):
         out.append(Path(java_home))
