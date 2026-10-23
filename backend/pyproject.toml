@@ -6,6 +6,11 @@ requires-python = ">=3.11"
 dependencies = [
     "agentscope>=2.0.10",
     "pydantic>=2.0",
+    # 架构分析用 tree-sitter 解析 Java 语法树。
+    # agentscope 自身依赖 tree_sitter，但**不含** tree_sitter_java，
+    # 必须显式声明，否则 devmentor.arch.scanner 在 import 时就失败。
+    "tree-sitter>=0.23",
+    "tree-sitter-java>=0.23",
     "tomli>=2.0; python_version < '3.11'",
 ]
 

@@ -48,14 +48,35 @@ $ devmentor
 git clone https://github.com/dre4m1nd/devmentor.git
 cd devmentor
 
-# 后端依赖
-cd backend && pip install agentscope pydantic && cd ..
+# 后端依赖（见下方「为什么是这几个包」）
+cd backend
+pip install -e .
+cd ..
 
 # 前端依赖与构建
 cd frontend && npm install && npm run build && cd ..
 
 # 启动
 node frontend/dist/cli.js
+```
+
+**为什么是这几个包**：`pip install -e .` 会按 `backend/pyproject.toml` 装齐依赖。请别手动只装 `agentscope pydantic`——架构分析要用 `tree-sitter-java` 解析 Java 语法树，而 `agentscope` 自身**只带 `tree_sitter`，不带 `tree_sitter_java`**。漏装的话，启动不报错，但一用 `/arch` 或 `arch_scan` 就 `ModuleNotFoundError`。
+
+装完可以自查：
+
+```bash
+cd backend && python -c "import tree_sitter_java; print('ok')"
+```
+
+### 只用一次？不装也行
+
+不想装依赖也能先看看静态分析能力（不调用模型、不需要 API Key）：
+
+```bash
+cd backend && python -m devmentor.server
+# 然后手工喂一行 JSON：
+# {"type":"command","name":"arch","args":[]}
+# {"type":"shutdown"}
 ```
 
 ---
