@@ -274,12 +274,25 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
     { isActive: activeMenu !== null },
   );
 
-  // 确认模式：y/n 决定是否放行
+  // 确认模式：只有 y / n 有效，其它键忽略。
+  //
+  // 之前是 approved = (inputChar === 'y')，意味着按任何其它键（含误触）
+  // 都会被当成"拒绝"并立即发出——确认框消失、无法撤销。
+  // 现在显式只认 y 和 n，别的键什么都不做，用户可以从容再按。
   useInput(
-    (inputChar) => {
+    (inputChar, key) => {
       const backend = backendRef.current;
       if (!backend) return;
-      const approved = inputChar.toLowerCase() === 'y';
+
+      const ch = inputChar.toLowerCase();
+      let approved: boolean | null = null;
+      if (ch === 'y' || key.return) {
+        approved = true;
+      } else if (ch === 'n' || key.escape) {
+        approved = false;
+      }
+      if (approved === null) return;   // 其它键：忽略
+
       backend.confirm(approved, approved ? '' : '用户拒绝了该操作');
       setPendingCalls(null);
       setBusy(true);

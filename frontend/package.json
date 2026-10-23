@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node test/streaming.test.mjs",
+    "test": "node test/streaming.test.mjs && node test/confirm.test.mjs",
     "dev": "tsx src/cli.tsx",
     "start": "node dist/cli.js"
   },

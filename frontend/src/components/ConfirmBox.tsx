@@ -27,7 +27,7 @@ export function ConfirmBox({
         );
       })}
       <Box marginTop={1}>
-        <Text color={theme.muted}>按 y 允许，n 拒绝</Text>
+        <Text color={theme.muted}>按 y 或回车允许，n 或 Esc 拒绝</Text>
       </Box>
     </Box>
   );
