@@ -22,12 +22,23 @@ from agentscope.state import AgentState
 
 from .config import Settings
 
+#: 保留的会话文件上限。0 表示不限制。
+#:
+#: 为什么要限：会话历史只增不减，重度使用（每天 10 个会话）一年会累积
+#: 约 110MB 且永不清理。限制后上限固定（100 个约 3MB）。
+#:
+#: 为什么用 100 而不是更小：会话是用户的对话资产，删早了会让人翻不回
+#: 上周的讨论。100 个对个人使用足够，同时把空间钳在可控范围。
+DEFAULT_MAX_SESSIONS = 100
+
+
 
 class SessionStore:
     """会话状态的落盘与读取。"""
 
-    def __init__(self, state_dir: Path) -> None:
+    def __init__(self, state_dir: Path, max_sessions: int = DEFAULT_MAX_SESSIONS) -> None:
         self._dir = state_dir
+        self._max_sessions = max_sessions
 
     @property
     def dir(self) -> Path:
@@ -60,9 +71,32 @@ class SessionStore:
             tmp = path.with_suffix(".json.tmp")
             tmp.write_text(payload, encoding="utf-8")
             os.replace(tmp, path)
+            self._prune()
             return path
         except Exception:
             return None
+
+    def _prune(self) -> None:
+        """超出上限时删掉最旧的会话文件。
+
+        只删会话状态，不碰 workspace 里的课程/技能/进度——
+        那些是用户资产，不该被"清理会话"牵连。
+        """
+        if self._max_sessions <= 0:
+            return
+        try:
+            files = sorted(
+                self._dir.glob("*.json"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for stale in files[self._max_sessions :]:
+                try:
+                    stale.unlink()
+                except OSError:
+                    pass  # 删不掉不影响本次保存
+        except OSError:
+            pass
 
     def clear(self, session_id: str) -> None:
         path = self.path_for(session_id)

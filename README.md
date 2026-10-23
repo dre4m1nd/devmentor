@@ -202,6 +202,25 @@ cd backend && python -m devmentor.server
 #   {"type":"shutdown"}
 ```
 
+### 会话文件与清理
+
+会话状态存在 `.devmentor/state/<会话id>.json`，**默认保留最近 100 个**，更旧的自动删除。
+
+为什么有上限：一个典型会话（20 轮对话）约 32KB。重度使用（每天 10 个会话）一年会累积约 110MB，且此前没有任何清理机制。限制后占用稳定在约 3MB。
+
+几个细节：
+
+- 清理只删会话状态，**不碰** `workspace/` 里的课程、技能、学习进度
+- 接续逻辑取最近的会话，清理不会把它删掉
+- `/new` 开的旧会话会保留，方便回看
+- 需要完整历史可以在代码里传 `SessionStore(dir, max_sessions=0)` 关闭限制
+
+```bash
+# 想看当前占用
+du -sh .devmentor/state        # macOS / Linux
+Get-ChildItem .devmentor/state | Measure-Object Length -Sum   # Windows
+```
+
 ### 跨 Python 版本
 
 声明支持 3.11+，但实际在 `datetime`、`asyncio` 等细节上版本间有差异。**改代码后建议至少用两个版本各跑一次**：
