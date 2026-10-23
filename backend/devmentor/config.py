@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -135,6 +137,65 @@ def _by_vendor(vendor: str) -> Provider | None:
     return next((p for p in PROVIDERS if p.vendor == vendor), None)
 
 
+
+# ---------------------------------------------------------------- 文件锁
+
+
+@contextmanager
+def _file_lock(target: Path, timeout: float = 5.0):
+    """对 target 加跨进程排他锁。
+
+    凭据与状态文件的"读-改-写"必须互斥：两个终端同时 /login 不同厂商时，
+    后写的会把先写的那条覆盖掉（实测丢失过 deepseek 与 openai 两条）。
+
+    实现用独立 .lock 文件 + O_EXCL 创建，跨平台可用（不依赖 fcntl，
+    Windows 上没有 fcntl）。超时后放弃加锁继续执行——宁可偶发覆盖，
+    也不让 /login 卡死在一个锁上。
+    """
+    lock = target.with_suffix(target.suffix + '.lock')
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    fd = None
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            if time.monotonic() > deadline:
+                break  # 超时：放弃加锁，避免死等
+            time.sleep(0.01)
+        except OSError:
+            break  # 文件系统不支持时退化为无锁
+    try:
+        yield
+    finally:
+        if fd is not None:
+            try:
+                os.close(fd)
+                lock.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+def _atomic_replace(src: Path, dst: Path, retries: int = 20) -> None:
+    """原子替换，带重试。
+
+    Windows 上 os.replace 在目标文件正被别的进程打开时会抛 WinError 5
+    （PermissionError）。多个终端同时写同一份凭据时这是常态，重试几次即可。
+    重试仍失败则抛出，让调用方决定如何处理——静默吞掉会掩盖真实错误。
+    """
+    last: Exception | None = None
+    for attempt in range(retries):
+        try:
+            os.replace(src, dst)
+            return
+        except (PermissionError, OSError) as e:
+            last = e
+            if attempt < retries - 1:
+                time.sleep(0.01 * (attempt + 1))  # 递增退避
+    if last is not None:
+        raise last
+
+
 # ---------------------------------------------------------------- 凭据存储
 
 
@@ -176,14 +237,21 @@ class CredentialStore:
         return self.load().get(provider.lower())
 
     def save(self, provider: str, key: str) -> None:
-        data = self.load()
-        data[provider.lower()] = key
-        self._write(data)
+        """保存一个 provider 的 key。
+
+        整个"读取-修改-写入"在文件锁内完成，否则两个终端同时 /login
+        不同厂商时，后写的会把先写的那条覆盖掉。
+        """
+        with _file_lock(self._file):
+            data = self.load()
+            data[provider.lower()] = key
+            self._write(data)
 
     def remove(self, provider: str) -> None:
-        data = self.load()
-        if data.pop(provider.lower(), None) is not None:
-            self._write(data)
+        with _file_lock(self._file):
+            data = self.load()
+            if data.pop(provider.lower(), None) is not None:
+                self._write(data)
 
     def _write(self, data: dict[str, str]) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +260,15 @@ class CredentialStore:
             "# 一行一个 provider=key，请勿提交到版本库。",
         ]
         lines += [f"{p}={k}" for p, k in data.items()]
-        self._file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # 原子替换：避免别的进程读到写了一半的文件。
+        # 临时文件名必须带进程号：多进程并发写时若都用同一个 .tmp，
+        # 会互相抢文件导致 PermissionError（实测 4 进程同时写必现）。
+        tmp = self._file.with_suffix(f"{self._file.suffix}.{os.getpid()}.tmp")
+        tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        try:
+            _atomic_replace(tmp, self._file)
+        finally:
+            tmp.unlink(missing_ok=True)
         try:
             os.chmod(self._file, 0o600)
         except OSError:

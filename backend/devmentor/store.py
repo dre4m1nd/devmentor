@@ -20,7 +20,7 @@ from pathlib import Path
 
 from agentscope.state import AgentState
 
-from .config import Settings
+from .config import Settings, _atomic_replace
 
 #: 保留的会话文件上限。0 表示不限制。
 #:
@@ -68,9 +68,14 @@ class SessionStore:
             path = self.path_for(session_id)
             payload = state.model_dump_json(indent=1)
             # 先写临时文件再替换：避免写一半崩溃留下半个 JSON
-            tmp = path.with_suffix(".json.tmp")
+            # 临时文件名带进程号：多进程同时保存同一会话时，
+            # 若共用一个 .tmp 会互相抢文件导致 PermissionError。
+            tmp = path.with_suffix(f".json.{os.getpid()}.tmp")
             tmp.write_text(payload, encoding="utf-8")
-            os.replace(tmp, path)
+            try:
+                _atomic_replace(tmp, path)
+            finally:
+                tmp.unlink(missing_ok=True)
             self._prune()
             return path
         except Exception:
