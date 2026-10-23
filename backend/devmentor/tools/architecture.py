@@ -143,9 +143,19 @@ class ArchitectureTools:
         except OSError as e:
             return f"读取失败：{e}"
 
+        total = len(lines)
+        # 行号参数要夹到合法区间。之前只夹了 start，max_lines 为 0 或负数
+        # 时 end < start，会输出"第 5-4 行"甚至"第 5--1 行"这种无意义范围。
         start = max(1, start_line)
-        end = min(len(lines), start + max_lines - 1)
-        out = [f"{target.name}（第 {start}-{end} 行，共 {len(lines)} 行）"]
+        count = max(1, max_lines)
+        if start > total:
+            return (
+                f"{target.name} 共 {total} 行，起始行 {start_line} 已超过文件末尾。"
+                f"请把 start_line 改到 1 到 {total} 之间。"
+            )
+        end = min(total, start + count - 1)
+
+        out = [f"{target.name}（第 {start}-{end} 行，共 {total} 行）"]
         for no in range(start, end + 1):
             out.append(f"{no:>5}  {lines[no - 1]}")
         return "\n".join(out)
