@@ -428,8 +428,9 @@ class Settings:
     state_dir: Path = field(default_factory=lambda: Path(".devmentor/state"))
     project_root: Path | None = None
     permission_mode: str = "interactive"
+    #: ReAct 循环最大轮数。传给 AgentScope 的 ReActConfig，
+    #: 不设时框架默认 50；本项目默认 24，够一轮深度问答与工具调用。
     max_iters: int = 24
-    enable_shell: bool = False
     java_run_timeout: int = 10
     max_source_chars: int = 20000
 
@@ -444,6 +445,18 @@ class Settings:
             s.project_root = Path(pr)
         if mode := os.environ.get("DEVMENTOR_PERMISSION_MODE"):
             s.permission_mode = mode
+        # 以下三个之前只能改代码，现在也能用环境变量覆盖：
+        # workspace / state_dir 便于把数据放到别处（如共享盘、备份目录）；
+        # max_iters 便于临时放宽或收紧推理轮数。
+        if ws := os.environ.get("DEVMENTOR_WORKSPACE"):
+            s.workspace = Path(ws)
+        if sd := os.environ.get("DEVMENTOR_STATE_DIR"):
+            s.state_dir = Path(sd)
+        if mi := os.environ.get("DEVMENTOR_MAX_ITERS"):
+            try:
+                s.max_iters = int(mi)
+            except ValueError:
+                pass  # 非法值保持默认，不因一个环境变量拼错就起不来
         return s
 
     @property

@@ -255,6 +255,16 @@ def build_agent(
     """
     workspace.ensure()
     system_prompt = workspace.read_agents_md() or FALLBACK_SYSTEM_PROMPT
+    # language 之前只是被读进来、从未使用。这里把它变成实际生效的指令：
+    # AGENTS.md 默认要求中文讲解，切换英文时要有明确的覆盖说明。
+    if (settings.language or "zh").lower().startswith("en"):
+        system_prompt += (
+            "\n\n---\n\n"
+            "**Language override**: reply in English. Keep code, identifiers, "
+            "class names and error messages in their original form.\n"
+        )
+
+    from agentscope.agent._config import ReActConfig
 
     kwargs = {}
     if state is not None:
@@ -265,5 +275,8 @@ def build_agent(
         system_prompt=system_prompt,
         model=build_model(settings, store),
         toolkit=build_toolkit(settings, workspace),
+        # 之前 max_iters 只定义没传入，实际用的是 AgentScope 默认的 50 轮。
+        # 现在按配置生效：默认 24 轮，超了就停并给出提示。
+        react_config=ReActConfig(max_iters=settings.max_iters),
         **kwargs,
     )

@@ -183,6 +183,34 @@ devmentor/
 
 ---
 
+## 配置
+
+全部配置走环境变量，改完重启生效。
+
+| 环境变量 | 默认值 | 作用 |
+| --- | --- | --- |
+| `DEVELOPMENT_MODEL_ID` | `openai:minimax/minimax-m3.1-flash:free` | 模型，`provider:model` 形式 |
+| `DEVELOPMENT_BASE_URL` | OpenRouter 网关 | 自定义 API 地址 |
+| `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `DEEPSEEK_API_KEY` | 空 | 模型密钥（优先于 `/login` 保存的凭据） |
+| `DEVMENTOR_LANGUAGE` | `zh` | 讲解语言，`zh` 或 `en` |
+| `DEVMENTOR_PERMISSION_MODE` | `interactive` | 权限档位，见上文 |
+| `DEVMENTOR_PROJECT_ROOT` | 当前目录 | 导师读写的代码目录 |
+| `DEVMENTOR_WORKSPACE` | `.devmentor/workspace` | 课程、技能、进度所在目录 |
+| `DEVMENTOR_STATE_DIR` | `.devmentor/state` | 会话状态目录 |
+| `DEVMENTOR_MAX_ITERS` | `24` | 单轮推理最大轮数 |
+| `DEVMENTOR_JAVA_HOME` | 自动探测 | 指定 JDK 17+ |
+
+```bash
+# 例子：英文讲解 + 只读模式 + 数据放到别处
+export DEVMENTOR_LANGUAGE=en
+export DEVMENTOR_PERMISSION_MODE=read-only
+export DEVMENTOR_WORKSPACE=~/devmentor-data/workspace
+```
+
+> 应用内也能改一部分：`/mode` 切权限、`/model` 换模型、`/login` 换凭据，这些立刻生效且会写进会话状态。
+
+---
+
 ## 开发
 
 ```bash
