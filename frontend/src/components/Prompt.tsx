@@ -12,10 +12,8 @@ import { COMMANDS, type CommandDef } from '../commands.js';
  * 这是 Ink 相比手写终端控制最省事的地方——候选列表就是普通组件。
  */
 export function Prompt({
-  disabled,
   onSubmit,
 }: {
-  disabled: boolean;
   onSubmit: (text: string) => void;
 }): React.ReactElement {
   const [value, setValue] = useState('');
@@ -34,7 +32,6 @@ export function Prompt({
         }) + '\n');
       } catch {}
     }
-    if (disabled) return;
 
     if (key.return) {
       const text = value.trim();
@@ -106,7 +103,7 @@ export function Prompt({
         </Text>
         <Text color={theme.muted}>{symbols.prompt} </Text>
         <Text>{value}</Text>
-        {disabled ? null : <Text color={theme.muted}>▌</Text>}
+        <Text color={theme.muted}>▌</Text>
       </Box>
 
       {openMenu && matches.length > 0 ? (

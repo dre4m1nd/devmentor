@@ -290,7 +290,7 @@ export function App({ backendDir, python, projectRoot }: AppProps): React.ReactE
         </Box>
       ) : (
         <Box marginTop={1}>
-          <Prompt disabled={false} onSubmit={submit} />
+          <Prompt onSubmit={submit} />
         </Box>
       )}
     </Box>

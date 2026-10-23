@@ -14,6 +14,9 @@ from .model import ProjectSnapshot
 from .rules import ArchFinding, Severity, check
 from .scanner import DEFAULT_EXCLUDED, scan
 
+#: 每个项目保留的架构报告份数。够翻历史，又不会无限堆积。
+MAX_REPORTS_PER_PROJECT = 10
+
 
 @dataclass(slots=True)
 class AnalysisResult:
@@ -86,14 +89,35 @@ class AnalysisResult:
                     lines.append(f"   文件：{', '.join(f.files)}")
         return "\n".join(lines)
 
-    def write_report(self, report_dir: Path) -> Path:
-        """把报告落盘，返回文件路径。"""
+    def write_report(self, report_dir: Path, keep: int = MAX_REPORTS_PER_PROJECT) -> Path:
+        """把报告落盘，返回文件路径。
+
+        每次评审都新建一个带时间戳的文件，便于对比历史；但只保留每个项目
+        最近的 keep 份。否则反复评审同一个项目会让 reports/ 无限膨胀。
+
+        清理只针对本项目的文件（按 arch-<项目名>- 前缀匹配），
+        不会动别的项目的报告。
+        """
         report_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         name = self.project_root.name or "project"
         target = report_dir / f"arch-{name}-{stamp}.md"
         target.write_text(self.render(), encoding="utf-8")
+        self._prune(report_dir, name, keep)
         return target
+
+    @staticmethod
+    def _prune(report_dir: Path, project_name: str, keep: int) -> None:
+        """删掉本项目最旧的报告，保留最近 keep 份。"""
+        if keep <= 0:
+            return
+        existing = sorted(report_dir.glob(f"arch-{project_name}-*.md"))
+        stale = existing[:-keep] if len(existing) > keep else []
+        for old in stale:
+            try:
+                old.unlink()
+            except OSError:
+                pass  # 删不掉不影响本次评审
 
 
 def analyze(
